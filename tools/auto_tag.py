@@ -39,9 +39,9 @@ def main():
     pattern = r"\d+\.\d+\.\d+" if branch == "main" else r"\d+\.\d+\.\d+-beta\.\d+"
     if not re.fullmatch(pattern, version):
         raise ValueError("Incorrect version format for branch: " + version)
-    if not Path("Core.lua").is_file() or not Path("Offensive.lua").is_file() or not Path("Settings.lua").is_file():
+    if not Path("Core.lua").is_file() or not Path("Offensive.lua").is_file() or not Path("Settings.lua").is_file() or not Path("Diagnostics.lua").is_file():
         raise ValueError("Missing addon source files")
-    if not Path("TotemCoverage.toc").read_text(encoding="utf-8").endswith("Settings.lua\n"):
+    if not Path("TotemCoverage.toc").read_text(encoding="utf-8").endswith("Diagnostics.lua\n"):
         raise ValueError("TOC load list unexpected")
     if ('local VERSION = "' + version + '"') not in Path("Core.lua").read_text(encoding="utf-8"):
         raise ValueError("Core and TOC versions differ")
