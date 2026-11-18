@@ -5,13 +5,14 @@ local TC = CreateFrame("Frame")
 local db
 local plates = {}
 local observedUnits = {} -- unit token -> last known plate and GUID
+local confirmedDeadGUIDs = {} -- once a creature GUID is dead, prevent corpse recounted on token reuse
 local lastKnownTotems = {} -- last confirmed totems, retained while data is secret
 local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.12"
-local SCAN_INTERVAL = 1.5
+local VERSION = "0.1.1-beta.13"
+local SCAN_INTERVAL = 0.4 -- faster death-driven recount; no additional combat aura access
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
 local AURA_OPTIONS = {
@@ -268,6 +269,13 @@ local function harmfulLines(totem)
         seen[identity] = true
         observedCount = observedCount + 1
         local dead, reason, flag, health = deathStatus(unit)
+        if type(identity) == "string" and identity:match("^Creature%-") then
+          if dead then
+            confirmedDeadGUIDs[identity] = true
+          elseif confirmedDeadGUIDs[identity] then
+            dead, reason = true, "previously-confirmed-dead"
+          end
+        end
         local disposition, state = "excluded:dead", "not-checked"
         if dead then
           deadCount = deadCount + 1
@@ -510,6 +518,8 @@ safeRegister("NAME_PLATE_UNIT_ADDED")
 safeRegister("NAME_PLATE_UNIT_REMOVED")
 safeRegister("GROUP_ROSTER_UPDATE")
 safeRegister("UNIT_AURA")
+safeRegister("UNIT_FLAGS")
+safeRegister("UNIT_HEALTH")
 safeRegister("PLAYER_REGEN_DISABLED")
 safeRegister("PLAYER_REGEN_ENABLED")
 TC:SetScript("OnEvent", function(_, event, arg)
@@ -521,6 +531,7 @@ TC:SetScript("OnEvent", function(_, event, arg)
     if db.mode ~= "all" and db.mode ~= "missing" and db.mode ~= "affected" then db.mode = "all" end
     if db.nameLayout ~= "inline" then db.nameLayout = "stacked" end
     if db.showUnknownEnemies == nil then db.showUnknownEnemies = true end
+    confirmedDeadGUIDs = {}
     db.diag = false -- never silently resume massive logging after a reload
     db.nativeOwned = false
     -- Recover already visible plates if the addon was enabled after login.
@@ -529,9 +540,13 @@ TC:SetScript("OnEvent", function(_, event, arg)
     return
   end
   if not db then return end
-  if event == "UNIT_AURA" then
+  if event == "UNIT_AURA" or event == "UNIT_FLAGS" or event == "UNIT_HEALTH" then
     if not allowed(arg) or type(arg) ~= "string" then return end
-    if arg ~= "player" and not arg:match("^party[1-4]$") then return end
+    if event == "UNIT_AURA" then
+      if arg ~= "player" and not arg:match("^party[1-4]$") then return end
+    elseif not observedUnits[arg] then
+      return -- avoid unrelated units on frequent health/flags changes
+    end
   end
   if event == "NAME_PLATE_UNIT_ADDED" then
     resolveUnit(arg)
@@ -539,6 +554,7 @@ TC:SetScript("OnEvent", function(_, event, arg)
     removeUnit(arg)
   elseif event == "PLAYER_ENTERING_WORLD" then
     for unit in pairs(observedUnits) do removeUnit(unit) end
+    confirmedDeadGUIDs = {} -- reset GUID memory on zone/reload
   end
   if db.diag and event ~= "UNIT_AURA" then
     log("EVENT", event .. " unit=" .. safe(arg))
