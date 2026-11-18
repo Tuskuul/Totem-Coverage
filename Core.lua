@@ -11,9 +11,10 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.14"
+local VERSION = "0.1.1-beta.15"
 local SCAN_INTERVAL = 0.4 -- faster death-driven recount; no additional combat aura access
-local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
+local DIAG_LIMIT = 1200 -- bounded recent history in SavedVariables
+local DIAG_TRIM = 250 -- trim in chunks, not once per record
 local EFFECTS = TotemCoverageEffects or {}
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
 local AURA_OPTIONS = {
@@ -46,18 +47,39 @@ end
 local function say(msg)
   print("|cff63c8f7Totem Coverage|r: " .. msg)
 end
-local function log(kind, detail)
+-- One storage path for Core, Diagnostics and Offensive; also cleans up
+-- historical SavedVariables accumulated by earlier beta versions.
+local function trimRecords()
+  if not db then return 0 end
+  if type(db.records) ~= "table" then db.records = {} end
+  local records = db.records
+  local count = #records
+  if count <= DIAG_LIMIT then return 0 end
+  local keep = {}
+  for i = count - DIAG_LIMIT + 1, count do
+    keep[#keep + 1] = records[i]
+  end
+  db.records = keep
+  return count - #keep
+end
+local function appendRecord(kind, detail)
   if not db or not db.diag then return end
-  local d = db.records
-  if #d >= DIAG_LIMIT then
-    if not db.limitNotice then
-      db.limitNotice = true
-      say("Diagnostic limit reached. /reload to save; /tc diag clear to reset.")
-    end
-    return
+  if type(db.records) ~= "table" then db.records = {} end
+  local records = db.records
+  if #records >= DIAG_LIMIT then
+    local keep = {}
+    for i = DIAG_TRIM + 1, #records do keep[#keep + 1] = records[i] end
+    db.records = keep
+    records = keep
   end
   local epoch, ms = stamp()
-  d[#d + 1] = { epoch, ms, kind, detail or "" }
+  records[#records + 1] = { epoch, ms, kind, detail or "" }
+end
+function TotemCoverage_AppendDiagnostic(kind, detail)
+  appendRecord(kind, detail)
+end
+local function log(kind, detail)
+  appendRecord(kind, detail)
 end
 local function observation(key, value)
   if lastStates[key] ~= value then
@@ -491,6 +513,7 @@ local function command(msg)
   if msg == "diag on" then
     if not db.diag then
       db.diag = true
+      local culled = trimRecords()
       db.session = (db.session or 0) + 1
       lastStates = {}
       log("SESSION", "start:" .. db.session .. " version=" .. VERSION)
@@ -513,6 +536,8 @@ local function command(msg)
     db.limitNotice = false
     lastStates = {}
     say("Saved diagnostic records cleared (save with /reload).")
+  elseif msg == "diag size" then
+    say("Diagnostic records: " .. #db.records .. " / " .. DIAG_LIMIT .. " (oldest auto-culled).")
   elseif msg == "diag" or msg == "status" or msg == "" then
     status()
   elseif msg == "mode all" or msg == "mode missing" or msg == "mode affected" then
@@ -550,7 +575,7 @@ local function command(msg)
     if type(TotemCoverage_ProbeNow) == "function" then TotemCoverage_ProbeNow() end
     say("Forced totem/nameplate scan; check saved diagnostics for details.")
   else
-    say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc layout stacked | inline, /tc unknown on | off, /tc range <name>, /tc settings, /tc scan")
+    say("Commands: /tc diag on | off | clear | size, /tc mode all | missing | affected, /tc layout stacked | inline, /tc unknown on | off, /tc range <name>, /tc settings, /tc scan")
   end
 end
 SLASH_TOTEMCOVERAGE1 = "/tc"
@@ -577,6 +602,8 @@ TC:SetScript("OnEvent", function(_, event, arg)
     TotemCoverageDB = TotemCoverageDB or {}
     db = TotemCoverageDB
     if type(db.records) ~= "table" then db.records = {} end
+    local culled = trimRecords()
+    if culled > 0 then say("Culled " .. culled .. " old diagnostic records. Recent history retained; /reload saves it.") end
     if db.mode ~= "all" and db.mode ~= "missing" and db.mode ~= "affected" then db.mode = "all" end
     if db.nameLayout ~= "inline" then db.nameLayout = "stacked" end
     if db.showUnknownEnemies == nil then db.showUnknownEnemies = true end
