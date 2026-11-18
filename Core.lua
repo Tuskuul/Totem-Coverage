@@ -8,7 +8,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.1"
+local VERSION = "0.1.1-beta.2"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -297,6 +297,8 @@ local function command(msg)
     db.mode = msg:match("mode (%a+)")
     say("Name display mode: " .. db.mode)
     updatePlates()
+  elseif msg == "settings" then
+    if type(TotemCoverage_ShowSettings) == "function" then TotemCoverage_ShowSettings() end
   elseif msg == "scan" then
     updatePlates()
     say("Forced totem/nameplate scan; check saved diagnostics for details.")
@@ -307,15 +309,19 @@ end
 SLASH_TOTEMCOVERAGE1 = "/tc"
 SLASH_TOTEMCOVERAGE2 = "/totemcoverage"
 SlashCmdList.TOTEMCOVERAGE = command
-TC:RegisterEvent("ADDON_LOADED")
-TC:RegisterEvent("PLAYER_ENTERING_WORLD")
-TC:RegisterEvent("PLAYER_TOTEM_UPDATE")
-TC:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-TC:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-TC:RegisterEvent("GROUP_ROSTER_UPDATE")
-TC:RegisterEvent("UNIT_AURA")
-TC:RegisterEvent("PLAYER_REGEN_DISABLED")
-TC:RegisterEvent("PLAYER_REGEN_ENABLED")
+local function safeRegister(event)
+  local ok, err = pcall(TC.RegisterEvent, TC, event)
+  if not ok then say("Event " .. event .. " unavailable: " .. tostring(err)) end
+end
+safeRegister("ADDON_LOADED")
+safeRegister("PLAYER_ENTERING_WORLD")
+safeRegister("PLAYER_TOTEM_UPDATE")
+safeRegister("NAME_PLATE_UNIT_ADDED")
+safeRegister("NAME_PLATE_UNIT_REMOVED")
+safeRegister("GROUP_ROSTER_UPDATE")
+safeRegister("UNIT_AURA")
+safeRegister("PLAYER_REGEN_DISABLED")
+safeRegister("PLAYER_REGEN_ENABLED")
 TC:SetScript("OnEvent", function(_, event, arg)
   if event == "ADDON_LOADED" then
     if arg ~= addonName then return end
