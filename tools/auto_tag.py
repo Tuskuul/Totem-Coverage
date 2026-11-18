@@ -41,7 +41,7 @@ def main():
         raise ValueError("Incorrect version format for branch: " + version)
     if not Path("Core.lua").is_file() or not Path("Offensive.lua").is_file() or not Path("Settings.lua").is_file():
         raise ValueError("Missing addon source files")
-    if not Path("TotemCoverage.toc").read_text(encoding="utf-8").endswith("Offensive.lua\n"):
+    if not Path("TotemCoverage.toc").read_text(encoding="utf-8").endswith("Settings.lua\n"):
         raise ValueError("TOC load list unexpected")
     if ('local VERSION = "' + version + '"') not in Path("Core.lua").read_text(encoding="utf-8"):
         raise ValueError("Core and TOC versions differ")
