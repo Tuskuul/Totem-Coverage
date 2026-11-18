@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.7 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.8 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -106,3 +106,11 @@ Other totems retain beneficial aura tracking where a persistent aura exists.
 Direct-damage, cleansing, threat, triggered and pulse-only totems are not
 falsely represented as aura coverage; their effects need separate detectors.
 This build detects observed auras, not verified caster ownership or distance.
+
+BETA.8 COMBAT RESTRICTION FIX
+Avoid querying unit auras during InCombatLockdown on Forever because
+GetAuraDataByIndex can fail on secret data with a Lua taint error.
+Coverage statuses during lockdown become UNKNOWN (gray ? in All mode);
+previous YES matches are not misleadingly retained as verified current data.
+Aura reads resume automatically after combat. No unverified enemy distance
+or caster attribution is inferred from seeing the Earthbind debuff.
