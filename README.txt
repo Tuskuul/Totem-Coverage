@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.3 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.4 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -79,3 +79,11 @@ unit names, GUIDs, removal/addition events, combat status, and CVar visibility.
 /tc scan takes a manual snapshot while diagnostics are enabled.
 Change-only observations plus 20-second checkpoints reduce log volume.
 Totem detection and overlays remain experimental: no direct live combat log reads.
+
+BETA.4 NAMEPLATE FIX
+Unit tokens are obtained from NAME_PLATE_UNIT_ADDED, not frame.namePlateUnitToken.
+GetNamePlateForUnit attaches the overlay to the observed physical nameplate.
+Last confirmed totem state is retained during secret-data combat periods,
+with known durations limiting retention. Earthbind shows its own name as
+an initial visual confirmation. Offensive target labels use same event method.
+This build is experimental; test in and out of combat before stable release.
