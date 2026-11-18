@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.9 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.10 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -126,3 +126,17 @@ A visible recognized totem nameplate can serve as fallback when summoned
 in combat with secret GetTotemInfo data. Its owner cannot be verified, so
 this fallback can match another shaman's similarly named physical totem.
 No combat-only guessed debuff counts or taint-causing aura reads.
+
+BETA.10 OBSERVED ENEMY DISPLAY RESTORED
+Confirmed debuff matches display green; visible hostile units with unavailable
+or secret debuff information display gray with '?' (enabled by default).
+Identical names are grouped by state and distinct observed GUID: e.g.
+'Vile Familiar x3' (confirmed) and 'Vile Familiar x2 ?' (unverified).
+Counts refresh as nameplates appear/disappear and accessible aura states change.
+The gray number is the count of OBSERVED enemies, not guaranteed to be in
+Earthbind range, slowed or owned by this totem. No guesswork on distance.
+The 'Coverage unknown (combat)' generic placeholder is removed.
+/tc unknown off disables unknown enemy names; /tc unknown on restores them.
+The setting is also available in /tc settings and persists between sessions.
+Missing mode still shows confirmed unaffected enemies only. No combat aura
+polling is resumed; restricted reads remain skipped to avoid Lua taint.
