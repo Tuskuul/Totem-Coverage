@@ -6,6 +6,7 @@ local knownUnits = {}
 local last = {}
 local elapsed = 0
 local OFFENSIVE = { ["Searing Totem"] = true }
+local EFFECTS = TotemCoverageEffects or {}
 local function valid(v)
   return v ~= nil and not (issecretvalue and issecretvalue(v))
 end
@@ -31,7 +32,9 @@ local function makeOverlay(plate)
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   title:SetPoint("TOP", f, "TOP", 0, -2)
   title:SetWidth(190)
-  title:SetText("|cffffd46bSearing Totem|r")
+  local attack = EFFECTS["Searing Totem"]
+  local radius = attack and attack.baseRadius
+  title:SetText("|cffffd46bAttack reach: " .. (radius and (radius .. " yd") or "unverified") .. "|r")
   local target = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   target:SetPoint("TOP", title, "BOTTOM", 0, -3)
   target:SetWidth(190)
