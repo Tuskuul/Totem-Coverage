@@ -94,12 +94,12 @@ local function scan()
   end
   record("matched-plates", tostring(count))
 end
-frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-frame:RegisterEvent("PLAYER_TOTEM_UPDATE")
-frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+pcall(frame.RegisterEvent, frame, "PLAYER_ENTERING_WORLD")
+pcall(frame.RegisterEvent, frame, "PLAYER_TOTEM_UPDATE")
+pcall(frame.RegisterEvent, frame, "NAME_PLATE_UNIT_ADDED")
+pcall(frame.RegisterEvent, frame, "NAME_PLATE_UNIT_REMOVED")
+pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_DISABLED")
+pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", function() scan() end)
 frame:SetScript("OnUpdate", function(_, dt)
   elapsed = elapsed + dt
