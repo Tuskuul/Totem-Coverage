@@ -19,7 +19,11 @@ local function record(key, value)
   last[key] = value
   local db = TotemCoverageDB
   if not db or not db.diag or type(db.records) ~= "table" then return end
-  if #db.records >= 30000 then return end
+  if type(TotemCoverage_AppendDiagnostic) == "function" then
+    TotemCoverage_AppendDiagnostic("TARGET", key .. "=" .. value)
+    return
+  end
+  if #db.records >= 1200 then return end
   local clock = (GetTime and GetTime()) or 0
   local epoch = (GetServerTime and GetServerTime()) or 0
   db.records[#db.records + 1] = { epoch, math.floor(clock * 1000 + 0.5), "TARGET", key .. "=" .. value }
