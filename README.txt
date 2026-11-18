@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.4 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.5 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -45,7 +45,7 @@ CURRENT CAVEATS
   shaman drops the same named totem, it can be falsely matched. That is
   deliberately documented and is a primary diagnostic test.
 - Windfury, periodic-heal and other totems may not have directly readable
-  persistent party auras. Unsupported mappings say 'No buff mapping'.
+  persistent party auras. Unsupported mappings show no extra names, not guessed data.
 - Buff names are provisional English labels; ranks/localization may vary.
 - Only player and party1-party4 are checked. Raid subgroups are not yet supported.
 - Aura reads may become secret in combat; these are marked UNKNOWN.
@@ -87,3 +87,11 @@ Last confirmed totem state is retained during secret-data combat periods,
 with known durations limiting retention. Earthbind shows its own name as
 an initial visual confirmation. Offensive target labels use same event method.
 This build is experimental; test in and out of combat before stable release.
+
+BETA.5 DISPLAY UPDATE
+/tc settings provides stacked (default) or inline party names.
+/tc layout stacked or /tc layout inline changes the setting directly.
+Party names use 14pt outlined text and are anchored just above the totem plate.
+The existing game totem name stays visible: the addon does not duplicate it.
+Earthbind and unmapped totems show no extra label or debug fallback.
+Only readable, mapped party coverage states are displayed. Unknown values retain '?'.
