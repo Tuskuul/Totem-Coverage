@@ -10,7 +10,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.11"
+local VERSION = "0.1.1-beta.12"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -237,43 +237,65 @@ end
 -- Only exclude corpses when death is positively readable. WoW Forever
 -- can mark some unit data secret during combat; unreadable must not be
 -- treated as dead (or it would hide every unknown enemy).
-local function confirmedDead(unit)
-  local ok, dead = apiCall(UnitIsDeadOrGhost, unit)
-  if ok and allowed(dead) and dead then return true end
-  -- Fallback for clients where the dead flag is unavailable, but health
-  -- remains readable. Never interpret secret health as zero.
-  if type(UnitHealth) == "function" then
-    local healthOK, health = apiCall(UnitHealth, unit)
-    if healthOK and allowed(health) and type(health) == "number" and health <= 0 then
-      return true
-    end
+local function deathStatus(unit)
+  -- Record the actual read state, never label a secret boolean as false.
+  local deadOK, dead = apiCall(UnitIsDeadOrGhost, unit)
+  local flag = deadOK and allowed(dead) and (dead and "true" or "false") or "unknown"
+  local healthFlag = "unreadable"
+  local healthOK, health = apiCall(UnitHealth, unit)
+  if healthOK and allowed(health) and type(health) == "number" then
+    healthFlag = health <= 0 and "zero" or "positive"
   end
-  return false
+  if flag == "true" then return true, "dead-flag", flag, healthFlag end
+  if healthFlag == "zero" then return true, "zero-health", flag, healthFlag end
+  if flag == "false" or healthFlag == "positive" then
+    return false, "alive-confirmed", flag, healthFlag
+  end
+  return false, "life-unknown", flag, healthFlag
 end
 local function harmfulLines(totem)
   local effect = HARMFUL_EFFECTS[totem.name]
   if not effect then return {}, false end
-  -- One GUID per actual visible enemy, even when nameplate tokens are reused.
-  -- Group by observed GUID and aura status: unverified is not confirmed range.
   local grouped, seen = {}, {}
+  local observedCount, deadCount, includedCount, hiddenCount = 0, 0, 0, 0
   for unit in pairs(observedUnits) do
     local ok, hostile = apiCall(UnitCanAttack, "player", unit)
-    if ok and allowed(hostile) and hostile and not confirmedDead(unit) then
+    if ok and allowed(hostile) and hostile then
       local name = unitName(unit)
       local guidOk, guid = apiCall(UnitGUID, unit)
       local identity = guidOk and allowed(guid) and type(guid) == "string" and guid or unit
       if name and not seen[identity] then
         seen[identity] = true
-        local state, why = auraStatus(unit, effect.names, "HARMFUL", effect.spellIDs)
-        observation("harmful:" .. totem.slot .. ":" .. unit, state .. ":" .. why .. ":" .. name)
-        local show = state == "yes" or
-          (state == "no" and (db.mode == "all" or db.mode == "missing")) or
-          (state == "unknown" and db.showUnknownEnemies ~= false and db.mode ~= "missing")
-        if show then
-          local groupKey = state .. ":" .. name
-          if not grouped[groupKey] then grouped[groupKey] = {name=name,state=state,count=0} end
-          grouped[groupKey].count = grouped[groupKey].count + 1
+        observedCount = observedCount + 1
+        local dead, reason, flag, health = deathStatus(unit)
+        local disposition, state = "excluded:dead", "not-checked"
+        if dead then
+          deadCount = deadCount + 1
+        else
+          local why
+          state, why = auraStatus(unit, effect.names, "HARMFUL", effect.spellIDs)
+          observation("harmful:" .. totem.slot .. ":" .. unit, state .. ":" .. why .. ":" .. name)
+          local show = state == "yes" or
+            (state == "no" and (db.mode == "all" or db.mode == "missing")) or
+            (state == "unknown" and db.showUnknownEnemies ~= false and db.mode ~= "missing")
+          if show then
+            local groupKey = state .. ":" .. name
+            if not grouped[groupKey] then grouped[groupKey] = {name=name,state=state,count=0} end
+            grouped[groupKey].count = grouped[groupKey].count + 1
+            includedCount = includedCount + 1
+            disposition = "included"
+          else
+            hiddenCount = hiddenCount + 1
+            disposition = "excluded:display-mode"
+          end
         end
+        -- Change-only per GUID: death transitions and counter decisions can
+        -- be correlated with the next aggregate display count. Diagnostics
+        -- remains OFF by default; no new combat-restricted aura reads.
+        observation("enemy-decision:" .. totem.name .. ":" .. identity,
+          "unit=" .. unit .. " name=" .. name .. " death=" .. reason ..
+          " deadFlag=" .. flag .. " health=" .. health ..
+          " aura=" .. state .. " verdict=" .. disposition)
       end
     end
   end
@@ -290,6 +312,12 @@ local function harmfulLines(totem)
       (item.state == "unknown" and " ?" or "")
     output[#output + 1] = colors[item.state] .. item.name .. suffix .. qualifier .. "|r"
   end
+  -- Summaries are change-only too, so a death changing x3 -> x2 has a
+  -- concrete before/after trail, including whether a display filter hid it.
+  observation("enemy-count:" .. totem.name,
+    "observed=" .. observedCount .. " dead=" .. deadCount ..
+    " included=" .. includedCount .. " hidden=" .. hiddenCount ..
+    " display=" .. table.concat(output, " / "))
   -- No generic combat placeholder: show actual observed enemy names when
   -- their debuff state is unknown, or nothing if no enemies are observed.
   return output, true
