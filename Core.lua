@@ -11,9 +11,10 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.13"
+local VERSION = "0.1.1-beta.14"
 local SCAN_INTERVAL = 0.4 -- faster death-driven recount; no additional combat aura access
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
+local EFFECTS = TotemCoverageEffects or {}
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
 local AURA_OPTIONS = {
   ["Strength of Earth"] = {"Strength of Earth"},
@@ -114,6 +115,8 @@ local function baseName(name)
 end
 local function candidates(totemName)
   local base = baseName(totemName)
+  local effect = EFFECTS[totemName]
+  if effect then return effect.kind == "friendly-buff" and effect.auraNames or nil end
   return base and AURA_OPTIONS[base] or nil
 end
 local function roster()
@@ -132,9 +135,7 @@ end
 -- Describe effects that can be witnessed via unit auras. Other mechanics such as
 -- direct damage, cleansing, threat and periodic heals are deliberately NOT
 -- presented as a persistent applied aura unless observable on the target.
-local HARMFUL_EFFECTS = {
-  ["Earthbind Totem"] = { names = {"Earthbind"}, spellIDs = {[3600] = true} },
-}
+local HARMFUL_EFFECTS = { ["Earthbind Totem"] = EFFECTS["Earthbind Totem"] }
 local function auraStatus(unit, want, filter, ids)
   if not want then return "na", "unmapped-effect" end
   -- Forever 1.60.1 makes aura data secret in combat; querying these units
@@ -281,7 +282,7 @@ local function harmfulLines(totem)
           deadCount = deadCount + 1
         else
           local why
-          state, why = auraStatus(unit, effect.names, "HARMFUL", effect.spellIDs)
+          state, why = auraStatus(unit, effect.auraNames, "HARMFUL", effect.spellIDs)
           observation("harmful:" .. totem.slot .. ":" .. unit, state .. ":" .. why .. ":" .. name)
           local show = state == "yes" or
             (state == "no" and (db.mode == "all" or db.mode == "missing")) or
@@ -326,9 +327,36 @@ local function harmfulLines(totem)
     "observed=" .. observedCount .. " dead=" .. deadCount ..
     " included=" .. includedCount .. " hidden=" .. hiddenCount ..
     " display=" .. table.concat(output, " / "))
-  -- No generic combat placeholder: show actual observed enemy names when
-  -- their debuff state is unknown, or nothing if no enemies are observed.
+  -- Visible targets are not necessarily within the totem's small AoE.
+  local unverified = false
+  for _, entry in ipairs(entries) do
+    if entry.state == "unknown" then unverified = true; break end
+  end
+  if unverified then
+    table.insert(output, 1, "|cffb5b8beObserved; range unverified:|r")
+  end
   return output, true
+end
+-- For pulse/taunt/utility effects, never substitute aura guesses for actual
+-- hit, heal, cleanse or trigger confirmation.
+local function informationalLines(totem)
+  local effect = EFFECTS[totem.name]
+  if not effect then return {}, false end
+  local kind = effect.kind
+  if kind == "friendly-buff" or kind == "hostile-debuff" or
+     kind == "single-target-attack" then return {}, false end
+  local radius = effect.baseRadius and (tostring(effect.baseRadius) .. " yd") or "range unverified"
+  local summary
+  if kind == "hostile-pulse" then summary = "AoE pulse"
+  elseif kind == "hostile-taunt" then summary = "Taunt area"
+  elseif kind == "friendly-pulse" then summary = "Support pulse"
+  elseif kind == "reactive-utility" then summary = "Reactive utility"
+  elseif kind == "remote-utility" then summary = "Remote vision"
+  else return {}, false end
+  return {
+    "|cffb5b8be" .. summary .. ": " .. radius .. "|r",
+    "|cffb5b8beRecipients unverified|r",
+  }, true
 end
 local function resolveUnit(unit)
   if not allowed(unit) or type(unit) ~= "string" then return nil end
@@ -362,7 +390,7 @@ local function updatePlates()
   if combatRestricted then
     for _, info in pairs(observedUnits) do
       if info.name and not lookup[info.name] and
-        (HARMFUL_EFFECTS[info.name] or candidates(info.name)) then
+        (EFFECTS[info.name] ~= nil or candidates(info.name)) then
         lookup[info.name] = {name=info.name, slot=0, inferred=true}
         observation("combat-totem-fallback:" .. info.name, "nameplate-only:ownership-unverified")
       end
@@ -386,8 +414,13 @@ local function updatePlates()
       overlay = overlay or ensureOverlay(plate)
       if overlay then
         local lines, mapped
-        if HARMFUL_EFFECTS[totem.name] then
+        local effect = EFFECTS[totem.name]
+        if effect and effect.kind == "hostile-debuff" then
           lines, mapped = harmfulLines(totem)
+        elseif effect and effect.kind == "friendly-buff" then
+          lines, mapped = coverageLines(totem)
+        elseif effect then
+          lines, mapped = informationalLines(totem)
         else
           lines, mapped = coverageLines(totem)
         end
@@ -494,6 +527,22 @@ local function command(msg)
     db.showUnknownEnemies = msg == "unknown on"
     say("Observed-but-unverified enemies: " .. (db.showUnknownEnemies and "ON" or "OFF"))
     updatePlates()
+  elseif msg:match("^range%s+") or msg == "ranges" then
+    local term = msg:match("^range%s+(.+)$")
+    if term then
+      local found = false
+      for name, effect in pairs(EFFECTS) do
+        if name:lower():find(term, 1, true) then
+          say(name .. " | " .. effect.kind .. " | " ..
+            (effect.baseRadius and (effect.baseRadius .. " yd") or "range unverified") ..
+            " | " .. effect.verification .. " (not live measured)")
+          found = true
+        end
+      end
+      if not found then say("No registered totem matches: " .. term) end
+    else
+      say("Use /tc range Earthbind, /tc range Magma, /tc range Healing, etc.")
+    end
   elseif msg == "settings" then
     if type(TotemCoverage_ShowSettings) == "function" then TotemCoverage_ShowSettings() end
   elseif msg == "scan" then
@@ -501,7 +550,7 @@ local function command(msg)
     if type(TotemCoverage_ProbeNow) == "function" then TotemCoverage_ProbeNow() end
     say("Forced totem/nameplate scan; check saved diagnostics for details.")
   else
-    say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc layout stacked | inline, /tc unknown on | off, /tc settings, /tc scan")
+    say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc layout stacked | inline, /tc unknown on | off, /tc range <name>, /tc settings, /tc scan")
   end
 end
 SLASH_TOTEMCOVERAGE1 = "/tc"
