@@ -8,7 +8,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.2"
+local VERSION = "0.1.1-beta.3"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -301,6 +301,7 @@ local function command(msg)
     if type(TotemCoverage_ShowSettings) == "function" then TotemCoverage_ShowSettings() end
   elseif msg == "scan" then
     updatePlates()
+    if type(TotemCoverage_ProbeNow) == "function" then TotemCoverage_ProbeNow() end
     say("Forced totem/nameplate scan; check saved diagnostics for details.")
   else
     say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc scan, /tc status")
