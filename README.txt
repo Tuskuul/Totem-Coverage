@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.8 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.9 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -114,3 +114,15 @@ Coverage statuses during lockdown become UNKNOWN (gray ? in All mode);
 previous YES matches are not misleadingly retained as verified current data.
 Aura reads resume automatically after combat. No unverified enemy distance
 or caster attribution is inferred from seeing the Earthbind debuff.
+
+BETA.9 DYNAMIC ENEMY COUNTS AND IN-COMBAT SUMMON FALLBACK
+Enemies of the same name and confirmed state are grouped: Vile Familiar x3.
+Counts change whenever visible enemy GUIDs or aura statuses change, at the
+existing 1.5 second scan cadence. Counts are NOT proximity predictions.
+Unknown enemy entries are hidden by default; /tc unknown on makes them
+visible in All mode. When all statuses are unknowable during combat, a
+single 'Coverage unknown (combat)' note indicates the restricted data.
+A visible recognized totem nameplate can serve as fallback when summoned
+in combat with secret GetTotemInfo data. Its owner cannot be verified, so
+this fallback can match another shaman's similarly named physical totem.
+No combat-only guessed debuff counts or taint-causing aura reads.
