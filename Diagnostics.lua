@@ -59,31 +59,33 @@ local function unitProbe(unit, note)
     " dead=" .. (dOk and safe(dead) or "error:" .. safe(dead))
   changed("unit:" .. unit, status)
 end
+local observed = {}
+local function inspectFrame(unit)
+  if not readable(unit) or type(unit) ~= "string" then return end
+  local api = C_NamePlate and C_NamePlate.GetNamePlateForUnit
+  local ok, plate = call(api, unit)
+  local status = ok and readable(plate) and ("frame=" .. safe(plate)) or
+    (ok and "frame=nil-or-secret" or ("error=" .. safe(plate)))
+  changed("frame:" .. unit, status)
+  if ok and readable(plate) and plate then
+    observed[unit] = plate
+  end
+end
 local function nameplates()
   local api = C_NamePlate and C_NamePlate.GetNamePlates
-  if type(api) ~= "function" then
-    changed("nameplates", "API-unavailable")
+  local ok, list = call(api)
+  if not ok or not readable(list) or type(list) ~= "table" then
+    changed("plate-roster", "unavailable:" .. safe(list))
     return
   end
-  local ok, plates = call(api)
-  if not ok or not readable(plates) or type(plates) ~= "table" then
-    changed("nameplates", ok and "unreadable" or ("call-failed:" .. safe(plates)))
-    return
-  end
-  local count, tokens, missing = 0, {}, 0
-  for _, plate in ipairs(plates) do
-    count = count + 1
-    local pOk, token = pcall(function() return plate.namePlateUnitToken end)
-    if pOk and readable(token) and type(token) == "string" then
-      tokens[#tokens+1] = token
-      unitProbe(token, "enumeration")
-    else
-      missing = missing + 1
-      changed("plate-no-token", "count=" .. missing .. " token=" .. (pOk and safe(token) or "error"))
+  local count = #list
+  local matched = 0
+  for unit, plate in pairs(observed) do
+    for _, item in ipairs(list) do
+      if item == plate then matched = matched + 1; break end
     end
   end
-  table.sort(tokens)
-  changed("plate-roster", "count=" .. count .. " missing-token=" .. missing .. " units=" .. table.concat(tokens, ","))
+  changed("plate-roster", "total=" .. count .. " observed-frame-matches=" .. matched)
 end
 local function environment()
   local ok, combat = call(InCombatLockdown)
@@ -114,8 +116,12 @@ local function eventHandler(_, event, arg)
   if event == "NAME_PLATE_UNIT_ADDED" then
     store("PLATE-ADDED", "unit=" .. safe(arg))
     unitProbe(arg, event)
+    inspectFrame(arg)
   elseif event == "NAME_PLATE_UNIT_REMOVED" then
     store("PLATE-REMOVED", "unit=" .. safe(arg))
+    observed[arg] = nil
+  elseif event == "PLAYER_ENTERING_WORLD" then
+    observed = {}
   elseif event == "PLAYER_TOTEM_UPDATE" then
     store("TOTEM-EVENT", "slot=" .. safe(arg))
   elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
