@@ -1,0 +1,30 @@
+name: Auto-tag validated Totem Coverage versions
+on:
+  push:
+    branches: [beta, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: totem-auto-tag-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out pushed commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify addon file inventory and version
+        run: |
+          test -s TotemCoverage.toc
+          test -s Core.lua
+          test -s Offensive.lua
+      - name: Create missing tag for current version
+        env:
+          PREVIOUS_COMMIT: ${{ github.event.before }}
+        run: python3 tools/auto_tag.py
