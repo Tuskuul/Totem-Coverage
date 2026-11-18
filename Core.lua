@@ -10,7 +10,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.7"
+local VERSION = "0.1.1-beta.8"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -136,6 +136,12 @@ local HARMFUL_EFFECTS = {
 }
 local function auraStatus(unit, want, filter, ids)
   if not want then return "na", "unmapped-effect" end
+  -- Forever 1.60.1 makes aura data secret in combat; querying these units
+  -- can cause an explicit addon-taint failure even when wrapped in pcall.
+  -- Do not claim a stale precombat observation is still current.
+  if InCombatLockdown and InCombatLockdown() then
+    return "unknown", "combat-restricted-skip"
+  end
   if not (C_UnitAuras and type(C_UnitAuras.GetAuraDataByIndex) == "function") then
     return "unknown", "aura-api-unavailable"
   end
