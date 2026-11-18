@@ -10,7 +10,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.9"
+local VERSION = "0.1.1-beta.10"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -238,8 +238,8 @@ local function harmfulLines(totem)
   local effect = HARMFUL_EFFECTS[totem.name]
   if not effect then return {}, false end
   -- One GUID per actual visible enemy, even when nameplate tokens are reused.
-  -- Count only confirmed aura matches; visibility alone is not effect range.
-  local grouped, seen, unknown = {}, {}, false
+  -- Group by observed GUID and aura status: unverified is not confirmed range.
+  local grouped, seen = {}, {}
   for unit in pairs(observedUnits) do
     local ok, hostile = apiCall(UnitCanAttack, "player", unit)
     if ok and allowed(hostile) and hostile then
@@ -250,10 +250,9 @@ local function harmfulLines(totem)
         seen[identity] = true
         local state, why = auraStatus(unit, effect.names, "HARMFUL", effect.spellIDs)
         observation("harmful:" .. totem.slot .. ":" .. unit, state .. ":" .. why .. ":" .. name)
-        if state == "unknown" then unknown = true end
         local show = state == "yes" or
           (state == "no" and (db.mode == "all" or db.mode == "missing")) or
-          (state == "unknown" and db.showUnknownEnemies == true and db.mode == "all")
+          (state == "unknown" and db.showUnknownEnemies ~= false and db.mode ~= "missing")
         if show then
           local groupKey = state .. ":" .. name
           if not grouped[groupKey] then grouped[groupKey] = {name=name,state=state,count=0} end
@@ -275,11 +274,8 @@ local function harmfulLines(totem)
       (item.state == "unknown" and " ?" or "")
     output[#output + 1] = colors[item.state] .. item.name .. suffix .. qualifier .. "|r"
   end
-  -- A clear neutral message is preferable to an empty attachment when
-  -- Earthbind is placed during combat and aura reads are restricted.
-  if #output == 0 and unknown and InCombatLockdown and InCombatLockdown() then
-    output[1] = "|cffb5b8beCoverage unknown (combat)|r"
-  end
+  -- No generic combat placeholder: show actual observed enemy names when
+  -- their debuff state is unknown, or nothing if no enemies are observed.
   return output, true
 end
 local function resolveUnit(unit)
@@ -444,7 +440,7 @@ local function command(msg)
     updatePlates()
   elseif msg == "unknown on" or msg == "unknown off" then
     db.showUnknownEnemies = msg == "unknown on"
-    say("Unknown enemy listings: " .. (db.showUnknownEnemies and "ON" or "OFF"))
+    say("Observed-but-unverified enemies: " .. (db.showUnknownEnemies and "ON" or "OFF"))
     updatePlates()
   elseif msg == "settings" then
     if type(TotemCoverage_ShowSettings) == "function" then TotemCoverage_ShowSettings() end
@@ -453,7 +449,7 @@ local function command(msg)
     if type(TotemCoverage_ProbeNow) == "function" then TotemCoverage_ProbeNow() end
     say("Forced totem/nameplate scan; check saved diagnostics for details.")
   else
-    say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc layout stacked | inline, /tc settings, /tc scan")
+    say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc layout stacked | inline, /tc unknown on | off, /tc settings, /tc scan")
   end
 end
 SLASH_TOTEMCOVERAGE1 = "/tc"
@@ -480,6 +476,7 @@ TC:SetScript("OnEvent", function(_, event, arg)
     if type(db.records) ~= "table" then db.records = {} end
     if db.mode ~= "all" and db.mode ~= "missing" and db.mode ~= "affected" then db.mode = "all" end
     if db.nameLayout ~= "inline" then db.nameLayout = "stacked" end
+    if db.showUnknownEnemies == nil then db.showUnknownEnemies = true end
     db.diag = false -- never silently resume massive logging after a reload
     db.nativeOwned = false
     -- Recover already visible plates if the addon was enabled after login.
