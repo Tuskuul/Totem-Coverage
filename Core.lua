@@ -10,7 +10,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.6"
+local VERSION = "0.1.1-beta.7"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -128,26 +128,37 @@ local function roster()
   end
   return units
 end
-local function auraStatus(unit, want)
-  if not want then return "na", "no-verified-buff-map" end
+-- Describe effects that can be witnessed via unit auras. Other mechanics such as
+-- direct damage, cleansing, threat and periodic heals are deliberately NOT
+-- presented as a persistent applied aura unless observable on the target.
+local HARMFUL_EFFECTS = {
+  ["Earthbind Totem"] = { names = {"Earthbind"}, spellIDs = {[3600] = true} },
+}
+local function auraStatus(unit, want, filter, ids)
+  if not want then return "na", "unmapped-effect" end
   if not (C_UnitAuras and type(C_UnitAuras.GetAuraDataByIndex) == "function") then
     return "unknown", "aura-api-unavailable"
   end
-  local count = 0
   for i = 1, 80 do
-    local ok, aura = apiCall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HELPFUL")
+    local ok, aura = apiCall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter or "HELPFUL")
     if not ok then return "unknown", "aura-call-failed:" .. safe(aura) end
     if not allowed(aura) then return "unknown", "aura-secret" end
     if aura == nil then return "no", "not-found" end
     if type(aura) ~= "table" then return "unknown", "aura-unexpected-type" end
-    local name = aura.name
-    if not allowed(name) then return "unknown", "aura-name-secret" end
+    local nOk, name = pcall(function() return aura.name end)
+    if not nOk or not allowed(name) then return "unknown", "aura-name-secret" end
+    local id
+    if ids then
+      local idOk, raw = pcall(function() return aura.spellId end)
+      if not idOk or not allowed(raw) then return "unknown", "aura-id-secret" end
+      id = raw
+    end
+    if ids and id and ids[id] then return "yes", "spell:" .. safe(id) end
     for j = 1, #want do
       if name == want[j] then return "yes", "matched:" .. safe(name) end
     end
-    count = count + 1
   end
-  return "unknown", "aura-scan-limit:" .. count
+  return "unknown", "aura-scan-limit"
 end
 local function displayName(unit)
   local ok, name = apiCall(UnitName, unit)
@@ -217,6 +228,35 @@ local function unitName(unit)
   if ok and allowed(name) and type(name) == "string" then return name end
   return nil
 end
+local function harmfulLines(totem)
+  local effect = HARMFUL_EFFECTS[totem.name]
+  if not effect then return {}, false end
+  local entries, seen = {}, {}
+  for unit, info in pairs(observedUnits) do
+    local ok, attackable = apiCall(UnitCanAttack, "player", unit)
+    if ok and allowed(attackable) and attackable then
+      local name = unitName(unit)
+      local guidOk, guid = apiCall(UnitGUID, unit)
+      local key = guidOk and allowed(guid) and guid or unit
+      if name and not seen[key] then
+        seen[key] = true
+        local state, why = auraStatus(unit, effect.names, "HARMFUL", effect.spellIDs)
+        observation("harmful:" .. totem.slot .. ":" .. unit, state .. ":" .. why .. ":" .. name)
+        local show = state == "yes" or
+          (state == "no" and (db.mode == "all" or db.mode == "missing")) or
+          (state == "unknown" and db.mode == "all")
+        if show then
+          local suffix = state == "no" and " x" or state == "unknown" and " ?" or ""
+          entries[#entries + 1] = {name=name, text=colors[state] .. name .. suffix .. "|r"}
+        end
+      end
+    end
+  end
+  table.sort(entries, function(a,b) return a.name < b.name end)
+  local output = {}
+  for _, entry in ipairs(entries) do output[#output+1] = entry.text end
+  return output, true
+end
 local function resolveUnit(unit)
   if not allowed(unit) or type(unit) ~= "string" then return nil end
   local plate = plateFor(unit)
@@ -259,7 +299,12 @@ local function updatePlates()
       matched = matched + 1
       overlay = overlay or ensureOverlay(plate)
       if overlay then
-        local lines, mapped = coverageLines(totem)
+        local lines, mapped
+        if HARMFUL_EFFECTS[totem.name] then
+          lines, mapped = harmfulLines(totem)
+        else
+          lines, mapped = coverageLines(totem)
+        end
         local layout = db.nameLayout == "inline" and "inline" or "stacked"
         local separator = layout == "inline" and "  |  " or "\n"
         local showNames = mapped and #lines > 0
