@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.2 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -14,6 +14,7 @@ If the physical totems have no nameplates, the addon has nothing to attach to.
 
 COMMANDS
 /tc                  Show current status
+/tc settings         Open nameplate settings
 /tc diag on          Record API diagnostics; request native combat logging
 /tc diag off         Stop addon diagnostics; stop combat log only if started by this addon
 /tc diag clear       Clear SavedVariables diagnostic records (requires diag off)
@@ -65,3 +66,8 @@ OFFENSIVE TARGET ALPHA (v0.1.1-beta)
 - /tc diag on logs TARGET state changes for correlation with native combat logs.
 - No restricted COMBAT_LOG_EVENT_UNFILTERED registration; no guessed last-hit target.
 - If another shaman drops an identical totem, nameplate ownership is not yet confirmed.
+
+NAMEPLATE DEFAULT
+Totem nameplates default enabled. /tc settings toggles this preference.
+If addon is listed but /tc is unknown, enable /console scriptErrors 1
+then /reload and report first Lua error.
