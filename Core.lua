@@ -10,7 +10,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.10"
+local VERSION = "0.1.1-beta.11"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -234,6 +234,22 @@ local function unitName(unit)
   if ok and allowed(name) and type(name) == "string" then return name end
   return nil
 end
+-- Only exclude corpses when death is positively readable. WoW Forever
+-- can mark some unit data secret during combat; unreadable must not be
+-- treated as dead (or it would hide every unknown enemy).
+local function confirmedDead(unit)
+  local ok, dead = apiCall(UnitIsDeadOrGhost, unit)
+  if ok and allowed(dead) and dead then return true end
+  -- Fallback for clients where the dead flag is unavailable, but health
+  -- remains readable. Never interpret secret health as zero.
+  if type(UnitHealth) == "function" then
+    local healthOK, health = apiCall(UnitHealth, unit)
+    if healthOK and allowed(health) and type(health) == "number" and health <= 0 then
+      return true
+    end
+  end
+  return false
+end
 local function harmfulLines(totem)
   local effect = HARMFUL_EFFECTS[totem.name]
   if not effect then return {}, false end
@@ -242,7 +258,7 @@ local function harmfulLines(totem)
   local grouped, seen = {}, {}
   for unit in pairs(observedUnits) do
     local ok, hostile = apiCall(UnitCanAttack, "player", unit)
-    if ok and allowed(hostile) and hostile then
+    if ok and allowed(hostile) and hostile and not confirmedDead(unit) then
       local name = unitName(unit)
       local guidOk, guid = apiCall(UnitGUID, unit)
       local identity = guidOk and allowed(guid) and type(guid) == "string" and guid or unit
