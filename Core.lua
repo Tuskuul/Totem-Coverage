@@ -8,7 +8,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.0-test"
+local VERSION = "0.1.1-beta"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -208,7 +208,7 @@ local function updatePlates()
       local nameOk, name = apiCall(UnitName, unit)
       if nameOk and allowed(name) and type(name) == "string" then
         local t = lookup[name]
-        if t then
+        if t and name ~= "Searing Totem" then
           matches = matches + 1
           local overlay = ensureOverlay(plate)
           if overlay then
