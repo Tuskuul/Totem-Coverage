@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.11 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.12 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -146,3 +146,13 @@ Hostile nameplate targets confirmed dead (UnitIsDeadOrGhost or readable
 zero UnitHealth) are excluded from all effect-count states immediately on
 next scan. Unreadable/secret death information is not assumed dead.
 This preserves the combat-safe unknown state for units that cannot be checked.
+
+BETA.12 DEAD-UNIT COUNT DIAGNOSTICS
+When /tc diag on is enabled, each visible hostile GUID gets a change-only
+enemy-decision entry: nameplate unit, name, dead flag, readable health state,
+death determination, aura state and included/excluded display decision.
+The enemy-count entry records observed, confirmed-dead, included and hidden
+totals and the precise displayed lines for each Earthbind scan that changes.
+These records let us correlate death transitions with x3 -> x2 displays.
+Dead units never contribute to included counts. No full-health logging and
+no new restricted combat aura reads. Diagnostic output is saved on /reload.
