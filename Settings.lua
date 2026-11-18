@@ -2,7 +2,7 @@
 local addonName = ...
 local cv = "nameplateShowFriendlyPlayerTotems"
 local events = CreateFrame("Frame")
-local panel, checkbox, label
+local panel, checkbox, label, stackedBox, inlineBox
 local pending = false
 local function get()
   local fn = (C_CVar and C_CVar.GetCVar) or GetCVar
@@ -26,6 +26,9 @@ end
 local function refresh()
   if not checkbox then return end
   checkbox:SetChecked(TotemCoverageDB and TotemCoverageDB.showTotemNameplates ~= false)
+  local layout = TotemCoverageDB and TotemCoverageDB.nameLayout or "stacked"
+  if stackedBox then stackedBox:SetChecked(layout ~= "inline") end
+  if inlineBox then inlineBox:SetChecked(layout == "inline") end
   local value = get()
   label:SetText(value == nil and "Client nameplate setting unavailable" or
     ("Client nameplates: " .. (value and "Enabled" or "Disabled")))
@@ -33,7 +36,7 @@ end
 function TotemCoverage_ShowSettings()
   if not panel then
     panel = CreateFrame("Frame", "TotemCoverageSettingsFrame", UIParent, "BasicFrameTemplateWithInset")
-    panel:SetSize(430, 170)
+    panel:SetSize(460, 255)
     panel:SetPoint("CENTER")
     panel:Hide()
     panel:SetMovable(true)
@@ -48,13 +51,35 @@ function TotemCoverage_ShowSettings()
     caption:SetPoint("LEFT", checkbox, "RIGHT", 6, 0)
     caption:SetText("Show friendly totem nameplates (default ON)")
     label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    label:SetPoint("TOPLEFT", 26, -100)
+    label:SetPoint("TOPLEFT", 26, -95)
     checkbox:SetScript("OnClick", function(self)
       if not TotemCoverageDB then return end
       TotemCoverageDB.showTotemNameplates = self:GetChecked() and true or false
       setPreference()
       refresh()
     end)
+    local section = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    section:SetPoint("TOPLEFT", 26, -129)
+    section:SetText("Party member name layout")
+
+    local function addOption(y, value, description)
+      local control = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+      control:SetPoint("TOPLEFT", 22, y)
+      local text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+      text:SetPoint("LEFT", control, "RIGHT", 4, 0)
+      text:SetText(description)
+      control:SetScript("OnClick", function()
+        if not TotemCoverageDB then return end
+        TotemCoverageDB.nameLayout = value
+        refresh()
+        if type(TotemCoverage_RefreshDisplay) == "function" then
+          TotemCoverage_RefreshDisplay()
+        end
+      end)
+      return control
+    end
+    stackedBox = addOption(-148, "stacked", "Stacked (one player per line)")
+    inlineBox = addOption(-182, "inline", "Inline (names side by side)")
     panel:SetScript("OnShow", refresh)
   end
   if panel:IsShown() then panel:Hide() else refresh(); panel:Show() end
@@ -68,6 +93,7 @@ events:SetScript("OnEvent", function(_, event, name)
     if TotemCoverageDB.showTotemNameplates == nil then
       TotemCoverageDB.showTotemNameplates = true
     end
+    if TotemCoverageDB.nameLayout ~= "inline" then TotemCoverageDB.nameLayout = "stacked" end
     setPreference()
   elseif TotemCoverageDB and (event == "PLAYER_ENTERING_WORLD" or pending) then
     setPreference()
