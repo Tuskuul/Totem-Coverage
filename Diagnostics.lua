@@ -2,7 +2,7 @@
 local F = CreateFrame("Frame")
 local elapsed, heartbeat = 0, 0
 local last, wasEnabled = {}, false
-local LIMIT = 30000
+local LIMIT = 1200
 local function safe(value)
   if value == nil then return "nil" end
   if issecretvalue and issecretvalue(value) then return "<secret>" end
@@ -20,6 +20,10 @@ end
 local function store(kind, detail)
   local db = TotemCoverageDB
   if not db or not db.diag or type(db.records) ~= "table" then return end
+  if type(TotemCoverage_AppendDiagnostic) == "function" then
+    TotemCoverage_AppendDiagnostic(kind, detail)
+    return
+  end
   if #db.records >= LIMIT then return end
   local ok, time = call(GetTime)
   local ms = ok and readable(time) and math.floor(time * 1000 + .5) or 0
