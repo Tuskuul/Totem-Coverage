@@ -261,7 +261,7 @@ local function updatePlates()
       if overlay then
         local lines, mapped = coverageLines(totem)
         local layout = db.nameLayout == "inline" and "inline" or "stacked"
-        local separator = layout == "inline" and "  |  " or "\\n"
+        local separator = layout == "inline" and "  |  " or "\n"
         local showNames = mapped and #lines > 0
         local shown, err = pcall(function()
           if showNames then
