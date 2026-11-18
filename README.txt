@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.0-test | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -57,3 +57,11 @@ DEBUG REPORT
 After testing, send TotemCoverage.lua and WoWCombatLog*.txt. The 2 files
 may contain character names, combat metadata and other identifying details.
 Review/redact them before sharing if you wish.
+
+OFFENSIVE TARGET ALPHA (v0.1.1-beta)
+- Searing Totem nameplate shows direct target if the Forever unit-token API exposes it.
+- Otherwise shows Target unknown; a missing unit token is not proof the totem is idle.
+- /tctarget on | off controls the experimental display (ON by default).
+- /tc diag on logs TARGET state changes for correlation with native combat logs.
+- No restricted COMBAT_LOG_EVENT_UNFILTERED registration; no guessed last-hit target.
+- If another shaman drops an identical totem, nameplate ownership is not yet confirmed.
