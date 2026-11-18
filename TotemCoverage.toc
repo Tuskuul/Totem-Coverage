@@ -2,8 +2,9 @@
 ## Title: Totem Coverage
 ## Notes: Floating party buff status on physical shaman totem nameplates; dual-source diagnostics for WoW Forever.
 ## Author: Totem Coverage Project
-## Version: 0.1.1-beta.2
+## Version: 0.1.1-beta.3
 ## SavedVariables: TotemCoverageDB
 Core.lua
 Offensive.lua
 Settings.lua
+Diagnostics.lua
