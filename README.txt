@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.2 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.3 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -71,3 +71,11 @@ NAMEPLATE DEFAULT
 Totem nameplates default enabled. /tc settings toggles this preference.
 If addon is listed but /tc is unknown, enable /console scriptErrors 1
 then /reload and report first Lua error.
+
+DIAGNOSTICS v0.1.1-beta.3
+A separate read-only diagnostics module records raw active/name/start/duration/icon
+for each totem slot, including nil/secret/error distinctions, observed nameplate
+unit names, GUIDs, removal/addition events, combat status, and CVar visibility.
+/tc scan takes a manual snapshot while diagnostics are enabled.
+Change-only observations plus 20-second checkpoints reduce log volume.
+Totem detection and overlays remain experimental: no direct live combat log reads.
