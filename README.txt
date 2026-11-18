@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.6 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.7 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -95,3 +95,14 @@ Party names use 14pt outlined text and are anchored just above the totem plate.
 The existing game totem name stays visible: the addon does not duplicate it.
 Earthbind and unmapped totems show no extra label or debug fallback.
 Only readable, mapped party coverage states are displayed. Unknown values retain '?'.
+
+BETA.7 EFFECT-BASED COVERAGE
+Harmful totem effects use hostile visible nameplates and HARMFUL aura reads.
+Earthbind detects the Earthbind debuff (spell 3600 or matching aura name).
+The same stacked/inline layout works for ally buffs and enemy debuffs.
+Affected names are green. All/Missing modes may also show confirmed
+unaffected (red x), and All shows unreadable/secret status (gray ?).
+Other totems retain beneficial aura tracking where a persistent aura exists.
+Direct-damage, cleansing, threat, triggered and pulse-only totems are not
+falsely represented as aura coverage; their effects need separate detectors.
+This build detects observed auras, not verified caster ownership or distance.
