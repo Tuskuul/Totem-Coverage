@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.14 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.15 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -50,7 +50,7 @@ CURRENT CAVEATS
 - Only player and party1-party4 are checked. Raid subgroups are not yet supported.
 - Aura reads may become secret in combat; these are marked UNKNOWN.
 - Requires totems with attached client nameplates and standard nameplate APIs.
-- Diagnostics capped at 30,000 records to avoid unbounded SavedVariables growth.
+- Diagnostics capped at 1,200 recent records; oldest entries auto-culled on load and during logging.
 - If native combat logging is already running, this addon leaves it untouched.
 - No source code copied from ShamanPower or Totem Nameplates.
 
@@ -185,3 +185,16 @@ Fire Nova is cast from an existing fire totem; talents are not automatically
 factored into any base radii. No new combat aura calls or protected APIs.
 Nameplate auto-enable, its checkbox, stacked/inline and unknown toggles
 remain unchanged and saved.
+
+BETA.15 AUTOMATIC DIAGNOSTIC LOG CULL
+All addon modules now write through a shared bounded logger.
+At login, old beta history is automatically trimmed to the latest 1,200
+entries; during diagnostics, the oldest 250 entries are dropped whenever
+the ceiling is reached. This prevents the SavedVariables log from growing
+without limit, while retaining the most recent investigation records.
+Diagnostics remain OFF by default after reload. /tc diag size reports the
+current saved record count; /tc diag clear still wipes everything manually
+when logging is OFF. /reload or logout is required to write the culled file.
+Note: if one session produces >1,200 entries, early session markers may be
+pruned; the latest events are favored over long historical session retention.
+Native WoWCombatLog files are managed by the client, not this cull.
