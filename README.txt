@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.5 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.6 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
