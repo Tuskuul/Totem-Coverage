@@ -4,11 +4,13 @@ local addonName = ...
 local TC = CreateFrame("Frame")
 local db
 local plates = {}
+local observedUnits = {} -- unit token -> last known plate and GUID
+local lastKnownTotems = {} -- last confirmed totems, retained while data is secret
 local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.3"
+local VERSION = "0.1.1-beta.4"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -68,23 +70,41 @@ local function apiCall(fn, ...)
   return true, a, b, c, d, e
 end
 local function currentTotems()
-  local out = {}
   if type(GetTotemInfo) ~= "function" then
     observation("GetTotemInfo", "unavailable")
-    return out
+    return lastKnownTotems
   end
+  local out, restricted = {}, false
   for slot = 1, 4 do
     local ok, active, name, start, duration, icon = apiCall(GetTotemInfo, slot)
-    if ok and allowed(active) and active and allowed(name) and type(name) == "string" then
-      out[#out + 1] = { slot = slot, name = name, start = allowed(start) and start or nil,
-        duration = allowed(duration) and duration or nil, icon = allowed(icon) and icon or nil }
+    if ok and (not allowed(active) or not allowed(name)) then
+      restricted = true
+      observation("totem:" .. slot, "secret")
+    elseif ok and allowed(active) and active and allowed(name) and type(name) == "string" and name ~= "" then
+      out[#out + 1] = {slot=slot,name=name,start=allowed(start) and start or nil,
+        duration=allowed(duration) and duration or nil,icon=allowed(icon) and icon or nil}
       observation("totem:" .. slot, name)
     elseif ok then
-      observation("totem:" .. slot, "inactive-or-secret")
+      observation("totem:" .. slot, "inactive")
     else
       observation("totem:" .. slot, "error:" .. safe(active))
     end
   end
+  if restricted then
+    -- Secret combat data must not erase a confirmed noncombat totem.
+    -- Expiry is enforced below when timing information is available.
+    local now = GetTime and GetTime() or 0
+    local retained = {}
+    for _, t in ipairs(lastKnownTotems) do
+      if type(t.start) ~= "number" or type(t.duration) ~= "number" or
+        t.duration <= 0 or now < t.start + t.duration + 1 then
+        retained[#retained+1] = t
+      end
+    end
+    lastKnownTotems = retained
+    return retained
+  end
+  lastKnownTotems = out
   return out
 end
 local function baseName(name)
@@ -165,66 +185,90 @@ local function ensureOverlay(plate)
     observation("create-overlay", "failed:" .. safe(overlay))
     return nil
   end
-  overlay:SetSize(150, 130)
-  overlay:SetPoint("BOTTOM", plate, "TOP", 0, 5)
-  overlay:SetFrameStrata("HIGH")
-  local title = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  title:SetPoint("BOTTOM", overlay, "BOTTOM", 0, 0)
-  title:SetWidth(180)
-  local lines = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  lines:SetPoint("BOTTOM", title, "TOP", 0, 3)
-  lines:SetWidth(180)
-  lines:SetJustifyH("CENTER")
-  lines:SetSpacing(2)
-  overlay.title = title
-  overlay.lines = lines
-  overlay:Hide()
+  -- Keeping all frame changes protected prevents one secure-combat failure
+  -- from breaking the rest of the addon.
+  local setup, err = pcall(function()
+    overlay:SetSize(180, 100)
+    overlay:SetPoint("BOTTOM", plate, "TOP", 0, 5)
+    local title = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    title:SetPoint("BOTTOM", overlay, "BOTTOM", 0, 0)
+    title:SetWidth(180)
+    local lines = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    lines:SetPoint("BOTTOM", title, "TOP", 0, 3)
+    lines:SetWidth(180)
+    lines:SetJustifyH("CENTER")
+    overlay.title, overlay.lines = title, lines
+    overlay:Hide()
+  end)
+  if not setup then
+    observation("setup-overlay", "failed:" .. safe(err))
+    return nil
+  end
   plates[plate] = overlay
   log("PLATE", "overlay-created")
   return overlay
 end
-local function hideAll()
-  for _, o in pairs(plates) do o:Hide() end
+local function unitName(unit)
+  local ok, name = apiCall(UnitName, unit)
+  if ok and allowed(name) and type(name) == "string" then return name end
+  return nil
+end
+local function resolveUnit(unit)
+  if not allowed(unit) or type(unit) ~= "string" then return nil end
+  local plate = plateFor(unit)
+  local guidOk, guid = apiCall(UnitGUID, unit)
+  if not guidOk or not allowed(guid) then guid = nil end
+  if plate then
+    observedUnits[unit] = {plate=plate, guid=guid, name=unitName(unit)}
+    observation("unit-plate:" .. unit, "resolved:" .. safe(guid) .. ":" .. safe(observedUnits[unit].name))
+  else
+    observation("unit-plate:" .. unit, "frame-unavailable")
+  end
+  return observedUnits[unit]
+end
+local function removeUnit(unit)
+  local record = observedUnits[unit]
+  if record and record.plate and plates[record.plate] then
+    pcall(plates[record.plate].Hide, plates[record.plate])
+  end
+  observedUnits[unit] = nil
+  observation("unit-plate:" .. safe(unit), "removed")
 end
 local function updatePlates()
-  hideAll()
   local totems = currentTotems()
   local lookup = {}
   for _, t in ipairs(totems) do lookup[t.name] = t end
-  if #totems == 0 then return end
-  if not (C_NamePlate and C_NamePlate.GetNamePlates) then
-    observation("GetNamePlates", "unavailable")
-    return
-  end
-  local ok, all = apiCall(C_NamePlate.GetNamePlates)
-  if not ok or not allowed(all) or type(all) ~= "table" then
-    observation("GetNamePlates", "failed-or-secret:" .. safe(all))
-    return
-  end
-  local matches = 0
-  for _, plate in ipairs(all) do
-    local unit = plate.namePlateUnitToken
-    if allowed(unit) and type(unit) == "string" then
-      local nameOk, name = apiCall(UnitName, unit)
-      if nameOk and allowed(name) and type(name) == "string" then
-        local t = lookup[name]
-        if t and name ~= "Searing Totem" then
-          matches = matches + 1
-          local overlay = ensureOverlay(plate)
-          if overlay then
-            local lines, mapped = coverageLines(t)
-            overlay.title:SetText("|cffffd46b" .. t.name .. "|r")
-            overlay.lines:SetText(mapped and (#lines > 0 and table.concat(lines, "\n") or "") or "|cffaaaaaaNo buff mapping|r")
-            overlay:Show()
-            observation("plate:" .. unit, "matched:" .. t.name)
-          end
-        end
-      else
-        observation("plate:" .. unit, "name-unavailable")
+  local matched = 0
+  -- Never infer unit tokens from plate.namePlateUnitToken: unavailable
+  -- on Forever. Discover them through NAME_PLATE_UNIT_ADDED instead.
+  for unit, info in pairs(observedUnits) do
+    local plate = info.plate
+    local name = unitName(unit)
+    if name and name ~= info.name then
+      -- nameplate unit IDs are recycled; refresh GUID and matching.
+      info = resolveUnit(unit) or info
+      plate = info.plate
+    end
+    local totem = name and lookup[name]
+    local overlay = plate and plates[plate]
+    if totem and name ~= "Searing Totem" and plate then
+      matched = matched + 1
+      overlay = overlay or ensureOverlay(plate)
+      if overlay then
+        local lines, mapped = coverageLines(totem)
+        local shown, err = pcall(function()
+          overlay.title:SetText("|cffffd46b" .. totem.name .. "|r")
+          overlay.lines:SetText(mapped and (#lines > 0 and table.concat(lines, "\n") or "") or
+            "|cffaaaaaaNo buff mapping|r")
+          overlay:Show()
+        end)
+        observation("overlay:" .. unit, shown and ("shown:" .. name) or ("failed:" .. safe(err)))
       end
+    elseif overlay then
+      pcall(overlay.Hide, overlay)
     end
   end
-  observation("plate-matches", tostring(matches))
+  observation("plate-matches", tostring(matched))
 end
 local function heartbeat()
   if not db.diag then return end
@@ -332,6 +376,8 @@ TC:SetScript("OnEvent", function(_, event, arg)
     if db.mode ~= "all" and db.mode ~= "missing" and db.mode ~= "affected" then db.mode = "all" end
     db.diag = false -- never silently resume massive logging after a reload
     db.nativeOwned = false
+    -- Recover already visible plates if the addon was enabled after login.
+    -- If frames lack unit tokens, event tracking populates them as they appear.
     say("Loaded. /tc diag on to capture paired API and combat logs; /tc status for help.")
     return
   end
@@ -340,9 +386,12 @@ TC:SetScript("OnEvent", function(_, event, arg)
     if not allowed(arg) or type(arg) ~= "string" then return end
     if arg ~= "player" and not arg:match("^party[1-4]$") then return end
   end
-  if event == "NAME_PLATE_UNIT_REMOVED" and allowed(arg) and type(arg) == "string" then
-    local plate = plateFor(arg)
-    if plate and plates[plate] then plates[plate]:Hide() end
+  if event == "NAME_PLATE_UNIT_ADDED" then
+    resolveUnit(arg)
+  elseif event == "NAME_PLATE_UNIT_REMOVED" then
+    removeUnit(arg)
+  elseif event == "PLAYER_ENTERING_WORLD" then
+    for unit in pairs(observedUnits) do removeUnit(unit) end
   end
   if db.diag and event ~= "UNIT_AURA" then
     log("EVENT", event .. " unit=" .. safe(arg))
