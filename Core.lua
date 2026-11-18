@@ -10,7 +10,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.8"
+local VERSION = "0.1.1-beta.9"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -237,30 +237,49 @@ end
 local function harmfulLines(totem)
   local effect = HARMFUL_EFFECTS[totem.name]
   if not effect then return {}, false end
-  local entries, seen = {}, {}
-  for unit, info in pairs(observedUnits) do
-    local ok, attackable = apiCall(UnitCanAttack, "player", unit)
-    if ok and allowed(attackable) and attackable then
+  -- One GUID per actual visible enemy, even when nameplate tokens are reused.
+  -- Count only confirmed aura matches; visibility alone is not effect range.
+  local grouped, seen, unknown = {}, {}, false
+  for unit in pairs(observedUnits) do
+    local ok, hostile = apiCall(UnitCanAttack, "player", unit)
+    if ok and allowed(hostile) and hostile then
       local name = unitName(unit)
       local guidOk, guid = apiCall(UnitGUID, unit)
-      local key = guidOk and allowed(guid) and guid or unit
-      if name and not seen[key] then
-        seen[key] = true
+      local identity = guidOk and allowed(guid) and type(guid) == "string" and guid or unit
+      if name and not seen[identity] then
+        seen[identity] = true
         local state, why = auraStatus(unit, effect.names, "HARMFUL", effect.spellIDs)
         observation("harmful:" .. totem.slot .. ":" .. unit, state .. ":" .. why .. ":" .. name)
+        if state == "unknown" then unknown = true end
         local show = state == "yes" or
           (state == "no" and (db.mode == "all" or db.mode == "missing")) or
-          (state == "unknown" and db.mode == "all")
+          (state == "unknown" and db.showUnknownEnemies == true and db.mode == "all")
         if show then
-          local suffix = state == "no" and " x" or state == "unknown" and " ?" or ""
-          entries[#entries + 1] = {name=name, text=colors[state] .. name .. suffix .. "|r"}
+          local groupKey = state .. ":" .. name
+          if not grouped[groupKey] then grouped[groupKey] = {name=name,state=state,count=0} end
+          grouped[groupKey].count = grouped[groupKey].count + 1
         end
       end
     end
   end
-  table.sort(entries, function(a,b) return a.name < b.name end)
+  local entries = {}
+  for _, item in pairs(grouped) do entries[#entries + 1] = item end
+  table.sort(entries, function(a,b)
+    if a.name ~= b.name then return a.name < b.name end
+    return a.state < b.state
+  end)
   local output = {}
-  for _, entry in ipairs(entries) do output[#output+1] = entry.text end
+  for _, item in ipairs(entries) do
+    local suffix = item.count > 1 and (" x" .. item.count) or ""
+    local qualifier = item.state == "no" and " (unaffected)" or
+      (item.state == "unknown" and " ?" or "")
+    output[#output + 1] = colors[item.state] .. item.name .. suffix .. qualifier .. "|r"
+  end
+  -- A clear neutral message is preferable to an empty attachment when
+  -- Earthbind is placed during combat and aura reads are restricted.
+  if #output == 0 and unknown and InCombatLockdown and InCombatLockdown() then
+    output[1] = "|cffb5b8beCoverage unknown (combat)|r"
+  end
   return output, true
 end
 local function resolveUnit(unit)
@@ -288,6 +307,19 @@ local function updatePlates()
   local totems = currentTotems()
   local lookup = {}
   for _, t in ipairs(totems) do lookup[t.name] = t end
+  local combatRestricted = InCombatLockdown and InCombatLockdown()
+  -- New totems dropped in combat cannot always be obtained from
+  -- GetTotemInfo. Their visible nameplate can still identify the type.
+  -- This fallback is a possible physical totem, NOT confirmed ownership.
+  if combatRestricted then
+    for _, info in pairs(observedUnits) do
+      if info.name and not lookup[info.name] and
+        (HARMFUL_EFFECTS[info.name] or candidates(info.name)) then
+        lookup[info.name] = {name=info.name, slot=0, inferred=true}
+        observation("combat-totem-fallback:" .. info.name, "nameplate-only:ownership-unverified")
+      end
+    end
+  end
   local matched = 0
   -- Never infer unit tokens from plate.namePlateUnitToken: unavailable
   -- on Forever. Discover them through NAME_PLATE_UNIT_ADDED instead.
@@ -363,7 +395,6 @@ local function nativeLogging(enable)
   elseif not enable and db.nativeOwned then
     local stopped, result = apiCall(LoggingCombat, false)
     log("NATIVE", "stop=" .. safe(stopped) .. " result=" .. safe(result))
-    if db.nameLayout ~= "inline" then db.nameLayout = "stacked" end
     db.nativeOwned = false
   else
     log("NATIVE", "already-active-or-not-owned:" .. safe(active))
@@ -411,6 +442,10 @@ local function command(msg)
     db.nameLayout = msg:match("layout (%a+)")
     say("Party name layout: " .. db.nameLayout)
     updatePlates()
+  elseif msg == "unknown on" or msg == "unknown off" then
+    db.showUnknownEnemies = msg == "unknown on"
+    say("Unknown enemy listings: " .. (db.showUnknownEnemies and "ON" or "OFF"))
+    updatePlates()
   elseif msg == "settings" then
     if type(TotemCoverage_ShowSettings) == "function" then TotemCoverage_ShowSettings() end
   elseif msg == "scan" then
@@ -444,6 +479,7 @@ TC:SetScript("OnEvent", function(_, event, arg)
     db = TotemCoverageDB
     if type(db.records) ~= "table" then db.records = {} end
     if db.mode ~= "all" and db.mode ~= "missing" and db.mode ~= "affected" then db.mode = "all" end
+    if db.nameLayout ~= "inline" then db.nameLayout = "stacked" end
     db.diag = false -- never silently resume massive logging after a reload
     db.nativeOwned = false
     -- Recover already visible plates if the addon was enabled after login.
