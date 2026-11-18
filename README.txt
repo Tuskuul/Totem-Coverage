@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.12 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.13 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -156,3 +156,12 @@ totals and the precise displayed lines for each Earthbind scan that changes.
 These records let us correlate death transitions with x3 -> x2 displays.
 Dead units never contribute to included counts. No full-health logging and
 no new restricted combat aura reads. Diagnostic output is saved on /reload.
+
+BETA.13 FAST CORPSE UPDATE
+Reduced recurring display refresh from 1.5 seconds to 0.4 seconds.
+UNIT_HEALTH and UNIT_FLAGS changes on observed nameplates also trigger a
+recount where client events are available. A confirmed dead Creature GUID
+is latched for the current world session so a recycled unit token cannot
+briefly bring its corpse back into the count. The GUID memory clears on
+PLAYER_ENTERING_WORLD. Gray enemy totals remain visible nameplate counts,
+not enemies proven in Earthbind range. Combat aura checks stay disabled.
