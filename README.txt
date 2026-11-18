@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.13 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.14 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -165,3 +165,23 @@ is latched for the current world session so a recycled unit token cannot
 briefly bring its corpse back into the count. The GUID memory clears on
 PLAYER_ENTERING_WORLD. Gray enemy totals remain visible nameplate counts,
 not enemies proven in Earthbind range. Combat aura checks stay disabled.
+
+BETA.14 TOTEM EFFECT PROFILE FOUNDATION
+New TotemEffects.lua registry: 21 known physical totems with provisional
+baseline radius, effect kind, target category, verification method and notes.
+Range data is reference only; addon does not measure true unit-to-totem
+distance and does not silently infer auras or hits.
+Earthbind: base 10 yd slow; confirmed debuffs stay green; observed, unknown
+mobs are gray with a prominent "Observed; range unverified" label.
+Gray counts DO NOT mean targets inside Earthbind's slow.
+Searing: its separate target module is retained and now labels its
+20 yd attack reach; direct unit-token target exposure is still experimental.
+Magma (8 yd AoE), Stoneclaw (8 yd taunt), friendly pulse and utility
+totems show effect/radius plus "Recipients unverified" rather than
+fabricated affected counts. Friendly persistent buff totems continue
+using aura observations with mappings supplied by the registry.
+/tc range Earthbind (or /tc range Magma etc.) displays registry values.
+Fire Nova is cast from an existing fire totem; talents are not automatically
+factored into any base radii. No new combat aura calls or protected APIs.
+Nameplate auto-enable, its checkbox, stacked/inline and unknown toggles
+remain unchanged and saved.
