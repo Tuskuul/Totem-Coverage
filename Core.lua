@@ -10,7 +10,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.4"
+local VERSION = "0.1.1-beta.5"
 local SCAN_INTERVAL = 1.5
 local DIAG_LIMIT = 30000 -- safety ceiling; SavedVariables cannot append directly to disk
 local colors = { yes = "|cff67e58a", no = "|cffff7474", unknown = "|cffb5b8be", na = "|cffb5b8be" }
@@ -188,16 +188,20 @@ local function ensureOverlay(plate)
   -- Keeping all frame changes protected prevents one secure-combat failure
   -- from breaking the rest of the addon.
   local setup, err = pcall(function()
-    overlay:SetSize(180, 100)
-    overlay:SetPoint("BOTTOM", plate, "TOP", 0, 5)
-    local title = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("BOTTOM", overlay, "BOTTOM", 0, 0)
-    title:SetWidth(180)
-    local lines = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    lines:SetPoint("BOTTOM", title, "TOP", 0, 3)
-    lines:SetWidth(180)
+    overlay:SetSize(260, 100)
+    overlay:SetPoint("BOTTOM", plate, "TOP", 0, 8)
+    overlay:SetFrameStrata("HIGH")
+    overlay:SetFrameLevel(plate:GetFrameLevel() + 2)
+    local lines = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lines:SetPoint("BOTTOM", overlay, "BOTTOM", 0, 0)
+    lines:SetWidth(260)
     lines:SetJustifyH("CENTER")
-    overlay.title, overlay.lines = title, lines
+    lines:SetJustifyV("BOTTOM")
+    lines:SetSpacing(3)
+    local font = (GameFontNormal and select(1, GameFontNormal:GetFont())) or STANDARD_TEXT_FONT
+    if font then lines:SetFont(font, 14, "OUTLINE") end
+    lines:SetShadowOffset(1, -1)
+    overlay.lines = lines
     overlay:Hide()
   end)
   if not setup then
@@ -256,19 +260,29 @@ local function updatePlates()
       overlay = overlay or ensureOverlay(plate)
       if overlay then
         local lines, mapped = coverageLines(totem)
+        local layout = db.nameLayout == "inline" and "inline" or "stacked"
+        local separator = layout == "inline" and "  |  " or "\\n"
+        local showNames = mapped and #lines > 0
         local shown, err = pcall(function()
-          overlay.title:SetText("|cffffd46b" .. totem.name .. "|r")
-          overlay.lines:SetText(mapped and (#lines > 0 and table.concat(lines, "\n") or "") or
-            "|cffaaaaaaNo buff mapping|r")
-          overlay:Show()
+          if showNames then
+            overlay.lines:SetText(table.concat(lines, separator))
+            overlay:Show()
+          else
+            -- No fabricated coverage, duplicated totem title, or debug fallback.
+            overlay.lines:SetText("")
+            overlay:Hide()
+          end
         end)
-        observation("overlay:" .. unit, shown and ("shown:" .. name) or ("failed:" .. safe(err)))
+        observation("overlay:" .. unit, shown and (showNames and ("shown:" .. name .. ":" .. layout .. ":" .. #lines) or ("hidden:no-verified-display:" .. name)) or ("failed:" .. safe(err)))
       end
     elseif overlay then
       pcall(overlay.Hide, overlay)
     end
   end
   observation("plate-matches", tostring(matched))
+end
+function TotemCoverage_RefreshDisplay()
+  if db then updatePlates() end
 end
 local function heartbeat()
   if not db.diag then return end
@@ -298,6 +312,7 @@ local function nativeLogging(enable)
   elseif not enable and db.nativeOwned then
     local stopped, result = apiCall(LoggingCombat, false)
     log("NATIVE", "stop=" .. safe(stopped) .. " result=" .. safe(result))
+    if db.nameLayout ~= "inline" then db.nameLayout = "stacked" end
     db.nativeOwned = false
   else
     log("NATIVE", "already-active-or-not-owned:" .. safe(active))
@@ -341,6 +356,10 @@ local function command(msg)
     db.mode = msg:match("mode (%a+)")
     say("Name display mode: " .. db.mode)
     updatePlates()
+  elseif msg == "layout stacked" or msg == "layout inline" then
+    db.nameLayout = msg:match("layout (%a+)")
+    say("Party name layout: " .. db.nameLayout)
+    updatePlates()
   elseif msg == "settings" then
     if type(TotemCoverage_ShowSettings) == "function" then TotemCoverage_ShowSettings() end
   elseif msg == "scan" then
@@ -348,7 +367,7 @@ local function command(msg)
     if type(TotemCoverage_ProbeNow) == "function" then TotemCoverage_ProbeNow() end
     say("Forced totem/nameplate scan; check saved diagnostics for details.")
   else
-    say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc scan, /tc status")
+    say("Commands: /tc diag on | off | clear, /tc mode all | missing | affected, /tc layout stacked | inline, /tc settings, /tc scan")
   end
 end
 SLASH_TOTEMCOVERAGE1 = "/tc"
