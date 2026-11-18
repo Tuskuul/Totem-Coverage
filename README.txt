@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.10 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.11 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -140,3 +140,9 @@ The 'Coverage unknown (combat)' generic placeholder is removed.
 The setting is also available in /tc settings and persists between sessions.
 Missing mode still shows confirmed unaffected enemies only. No combat aura
 polling is resumed; restricted reads remain skipped to avoid Lua taint.
+
+BETA.11 DEAD ENEMY FILTER
+Hostile nameplate targets confirmed dead (UnitIsDeadOrGhost or readable
+zero UnitHealth) are excluded from all effect-count states immediately on
+next scan. Unreadable/secret death information is not assumed dead.
+This preserves the combat-safe unknown state for units that cannot be checked.
