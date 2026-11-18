@@ -2,7 +2,7 @@
 local addonName = ...
 local cv = "nameplateShowFriendlyPlayerTotems"
 local events = CreateFrame("Frame")
-local panel, checkbox, label, stackedBox, inlineBox
+local panel, checkbox, label, stackedBox, inlineBox, unknownBox
 local pending = false
 local function get()
   local fn = (C_CVar and C_CVar.GetCVar) or GetCVar
@@ -29,6 +29,7 @@ local function refresh()
   local layout = TotemCoverageDB and TotemCoverageDB.nameLayout or "stacked"
   if stackedBox then stackedBox:SetChecked(layout ~= "inline") end
   if inlineBox then inlineBox:SetChecked(layout == "inline") end
+  if unknownBox then unknownBox:SetChecked(not TotemCoverageDB or TotemCoverageDB.showUnknownEnemies ~= false) end
   local value = get()
   label:SetText(value == nil and "Client nameplate setting unavailable" or
     ("Client nameplates: " .. (value and "Enabled" or "Disabled")))
@@ -36,7 +37,7 @@ end
 function TotemCoverage_ShowSettings()
   if not panel then
     panel = CreateFrame("Frame", "TotemCoverageSettingsFrame", UIParent, "BasicFrameTemplateWithInset")
-    panel:SetSize(460, 255)
+    panel:SetSize(460, 300)
     panel:SetPoint("CENTER")
     panel:Hide()
     panel:SetMovable(true)
@@ -80,6 +81,17 @@ function TotemCoverage_ShowSettings()
     end
     stackedBox = addOption(-148, "stacked", "Stacked (one player per line)")
     inlineBox = addOption(-182, "inline", "Inline (names side by side)")
+    unknownBox = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    unknownBox:SetPoint("TOPLEFT", 22, -222)
+    local unknownLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    unknownLabel:SetPoint("LEFT", unknownBox, "RIGHT", 4, 0)
+    unknownLabel:SetText("Show observed enemies with unknown debuff status (?)")
+    unknownBox:SetScript("OnClick", function(self)
+      if not TotemCoverageDB then return end
+      TotemCoverageDB.showUnknownEnemies = self:GetChecked() and true or false
+      refresh()
+      if type(TotemCoverage_RefreshDisplay) == "function" then TotemCoverage_RefreshDisplay() end
+    end)
     panel:SetScript("OnShow", refresh)
   end
   if panel:IsShown() then panel:Hide() else refresh(); panel:Show() end
