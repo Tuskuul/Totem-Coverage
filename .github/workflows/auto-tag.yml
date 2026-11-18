@@ -1,4 +1,4 @@
-name: Auto-tag validated Totem Coverage versions
+name: Auto-tag and publish Totem Coverage releases
 on:
   push:
     branches: [beta, main]
@@ -28,3 +28,31 @@ jobs:
         env:
           PREVIOUS_COMMIT: ${{ github.event.before }}
         run: python3 tools/auto_tag.py
+      - name: Publish GitHub release for the version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^## Version:[[:space:]]*//p' TotemCoverage.toc)"
+          tag="v${version}"
+          git fetch --no-tags origin "refs/tags/${tag}:refs/tags/${tag}" || git fetch --tags origin
+          tag_sha="$(git rev-list -n 1 "${tag}")"
+          if [ -z "${tag_sha}" ]; then
+            echo "Missing expected tag: ${tag}"
+            exit 1
+          fi
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "GitHub release already exists: ${tag}"
+            exit 0
+          fi
+          if [ "${RELEASE_BRANCH}" = "beta" ]; then
+            gh release create "${tag}" --verify-tag --prerelease \
+              --title "Totem Coverage ${version}" \
+              --notes "Experimental Totem Coverage beta build for WoW Forever 1.60.1."
+          else
+            gh release create "${tag}" --verify-tag \
+              --title "Totem Coverage ${version}" \
+              --notes "Totem Coverage stable release for WoW Forever 1.60.1."
+          fi
