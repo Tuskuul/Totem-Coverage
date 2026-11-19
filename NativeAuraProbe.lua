@@ -1,6 +1,7 @@
 -- Totem Coverage experimental native aura rendering for WoW Forever 1.60.1.
 -- Isolated research branch. Opt-in ONLY: /tcnative on, /tcnative off.
 -- This does NOT determine distance, caster ownership, or affected counts.
+-- No untrusted label or overlay is anchored to a native AuraContainer.
 -- It delegates rendering to Blizzard AuraContainer; it never examines
 -- secret aura payloads, aura-button visibility, or spell identities in Lua.
 local addonName = ...
@@ -79,10 +80,23 @@ local function newContainer(plate, offsetX, offsetY, filter, candidates, labelTe
     pcall(container.Hide, container)
     return nil, "configure:" .. tostring(errorMessage)
   end
-  local title = plate:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  title:SetPoint("BOTTOM", container, "TOP", 0, 1)
-  title:SetText(labelText)
-  title:Hide()
+  -- Do not anchor ordinary FontStrings to protected AuraContainer
+  -- widgets: this causes forbidden layout-aspect inheritance on Forever.
+  -- Both widgets are independently positioned relative to the nameplate.
+  local labelOK, title = pcall(plate.CreateFontString, plate, nil, "OVERLAY", "GameFontHighlightSmall")
+  if not labelOK or not title then
+    pcall(container.Hide, container)
+    return nil, "label-create:" .. tostring(title)
+  end
+  local positioned, labelError = pcall(function()
+    title:SetPoint("BOTTOM", plate, "TOP", offsetX, offsetY + 23)
+    title:SetText(labelText)
+    title:Hide()
+  end)
+  if not positioned then
+    pcall(container.Hide, container)
+    return nil, "label-layout:" .. tostring(labelError)
+  end
   return {container=container,title=title}, nil
 end
 local function makePair(plate)
