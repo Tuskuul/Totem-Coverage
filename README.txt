@@ -212,3 +212,36 @@ Enemy counts require readable GUIDs, and live nameplate GUIDs, display names,
 and plate frames are revalidated on each scan to handle recycled tokens,
 including same-named creatures. Confirmed dead GUID exclusions stay active.
 All existing friendly-nameplate controls and diagnostic culling remain.
+
+RESEARCH BRANCH: 0.1.1-native.1 / native-aura experiment
+This is NOT a CurseForge release, and not an improvement to confirmed
+Earthbind coverage. Stable maintenance baseline: maintenance/beta16.
+The normal physical totem overlays, GUID/death filtering, saved settings
+and optional observed hostile names remain available unchanged.
+To show the old helpful-but-unverified names above Earthbind: /tc unknown on.
+Each nameplate is observed client-wide; its proximity to Earthbind's 10
+yard effect is UNKNOWN. Dead units are excluded when death flags are safe.
+
+OPTIONAL VISUAL PROBE (OFF by default every reload)
+/tcnative on   Show two native aura groups attached above hostile plates
+/tcnative off  Hide experimental visuals
+/tcnative status  Report state
+Left: Blizzard-managed HARMFUL|PLAYER auras, up to four icons.
+Right: Blizzard-managed HARMFUL|PLAYER auras with candidate filter for
+spell ID 3600 (Earthbind debuff), up to four icons.
+The right group can legitimately stay empty: Blizzard's internal
+identity filter refuses exact spell-ID checks on restricted hostile
+auras. The left side may draw other player-applied debuffs; it is NOT
+an Earthbind-only indicator. This test does not inspect secret aura
+values or infer distance, hits, or counts. The test does not ascribe
+a totem's ownership. Label visibility is only a visual experiment.
+Create/reconfigure native widgets only outside combat. Units first
+seen in combat queue until combat ends. If no icons appear, approach
+a new hostile nameplate after leaving combat, or check /tcnative status
+and /tc diag on + saved diagnostics.
+The native addon depends on 12.1 CustomAuraContainerTemplate methods;
+on unsupported builds it reports a probe failure without altering the
+working nameplate text overlays. Maximum 40 cached plate frames during
+the test to avoid unlimited debug frame creation. Native widget drawing
+is performed by Blizzard; the Lua code never reads icon visibility.
+Do not merge to beta/main until field testing verifies the widgets.
