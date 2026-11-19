@@ -29,7 +29,7 @@ local function refresh()
   local layout = TotemCoverageDB and TotemCoverageDB.nameLayout or "stacked"
   if stackedBox then stackedBox:SetChecked(layout ~= "inline") end
   if inlineBox then inlineBox:SetChecked(layout == "inline") end
-  if unknownBox then unknownBox:SetChecked(not TotemCoverageDB or TotemCoverageDB.showUnknownEnemies ~= false) end
+  if unknownBox then unknownBox:SetChecked(TotemCoverageDB and TotemCoverageDB.showUnknownEnemies == true) end
   local value = get()
   label:SetText(value == nil and "Client nameplate setting unavailable" or
     ("Client nameplates: " .. (value and "Enabled" or "Disabled")))
@@ -85,7 +85,7 @@ function TotemCoverage_ShowSettings()
     unknownBox:SetPoint("TOPLEFT", 22, -222)
     local unknownLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     unknownLabel:SetPoint("LEFT", unknownBox, "RIGHT", 4, 0)
-    unknownLabel:SetText("Show observed enemies with unknown debuff status (?)")
+    unknownLabel:SetText("Show visible enemies without verified coverage (?)")
     unknownBox:SetScript("OnClick", function(self)
       if not TotemCoverageDB then return end
       TotemCoverageDB.showUnknownEnemies = self:GetChecked() and true or false
