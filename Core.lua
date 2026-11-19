@@ -11,7 +11,7 @@ local lastStates = {}
 local lastHeartbeat = 0
 local lastScan = 0
 local missingNotice = false
-local VERSION = "0.1.1-beta.15"
+local VERSION = "0.1.1-beta.16"
 local SCAN_INTERVAL = 0.4 -- faster death-driven recount; no additional combat aura access
 local DIAG_LIMIT = 1200 -- bounded recent history in SavedVariables
 local DIAG_TRIM = 250 -- trim in chunks, not once per record
@@ -281,14 +281,16 @@ local function harmfulLines(totem)
   local effect = HARMFUL_EFFECTS[totem.name]
   if not effect then return {}, false end
   local grouped, seen = {}, {}
+  local verifiedCount, uncertainCount, missingCount = 0, 0, 0
   local observedCount, deadCount, includedCount, hiddenCount = 0, 0, 0, 0
   for unit in pairs(observedUnits) do
     local ok, hostile = apiCall(UnitCanAttack, "player", unit)
     if ok and allowed(hostile) and hostile then
       local name = unitName(unit)
       local guidOk, guid = apiCall(UnitGUID, unit)
-      local identity = guidOk and allowed(guid) and type(guid) == "string" and guid or unit
-      if name and not seen[identity] then
+      -- Never use a recycled token as an enemy identity when GUID is unreadable.
+      local identity = guidOk and allowed(guid) and type(guid) == "string" and guid or nil
+      if name and identity and not seen[identity] then
         seen[identity] = true
         observedCount = observedCount + 1
         local dead, reason, flag, health = deathStatus(unit)
@@ -306,9 +308,12 @@ local function harmfulLines(totem)
           local why
           state, why = auraStatus(unit, effect.auraNames, "HARMFUL", effect.spellIDs)
           observation("harmful:" .. totem.slot .. ":" .. unit, state .. ":" .. why .. ":" .. name)
-          local show = state == "yes" or
-            (state == "no" and (db.mode == "all" or db.mode == "missing")) or
-            (state == "unknown" and db.showUnknownEnemies ~= false and db.mode ~= "missing")
+          -- Missing debuff is NOT proof of being unaffected inside radius.
+          if state == "yes" then verifiedCount = verifiedCount + 1
+          elseif state == "unknown" then uncertainCount = uncertainCount + 1
+          else missingCount = missingCount + 1 end
+          local show = (state == "yes" and db.mode ~= "missing") or
+            (state == "unknown" and db.showUnknownEnemies == true and db.mode == "all")
           if show then
             local groupKey = state .. ":" .. name
             if not grouped[groupKey] then grouped[groupKey] = {name=name,state=state,count=0} end
@@ -339,23 +344,25 @@ local function harmfulLines(totem)
   local output = {}
   for _, item in ipairs(entries) do
     local suffix = item.count > 1 and (" x" .. item.count) or ""
-    local qualifier = item.state == "no" and " (unaffected)" or
-      (item.state == "unknown" and " ?" or "")
+    local qualifier = item.state == "unknown" and " ?" or ""
     output[#output + 1] = colors[item.state] .. item.name .. suffix .. qualifier .. "|r"
   end
   -- Summaries are change-only too, so a death changing x3 -> x2 has a
   -- concrete before/after trail, including whether a display filter hid it.
   observation("enemy-count:" .. totem.name,
     "observed=" .. observedCount .. " dead=" .. deadCount ..
-    " included=" .. includedCount .. " hidden=" .. hiddenCount ..
-    " display=" .. table.concat(output, " / "))
-  -- Visible targets are not necessarily within the totem's small AoE.
-  local unverified = false
-  for _, entry in ipairs(entries) do
-    if entry.state == "unknown" then unverified = true; break end
+    " confirmed-aura=" .. verifiedCount .. " uncertain=" .. uncertainCount ..
+    " no-aura=" .. missingCount .. " included=" .. includedCount ..
+    " hidden=" .. hiddenCount .. " display=" .. table.concat(output, " / "))
+  -- Positive aura observations are distinct from optional screen-wide
+  -- nameplate observations; neither can attribute the caster.
+  if verifiedCount > 0 and db.mode ~= "missing" then
+    table.insert(output, 1, "|cff67e58aEarthbind debuff observed:|r")
+  elseif uncertainCount > 0 and db.showUnknownEnemies ~= true and db.mode == "all" then
+    output[1] = "|cffb5b8beEarthbind status unknown|r"
   end
-  if unverified then
-    table.insert(output, 1, "|cffb5b8beObserved; range unverified:|r")
+  if db.showUnknownEnemies == true and db.mode == "all" and uncertainCount > 0 then
+    output[#output + 1] = "|cffb5b8beGray = visible, range unverified|r"
   end
   return output, true
 end
@@ -424,10 +431,26 @@ local function updatePlates()
   for unit, info in pairs(observedUnits) do
     local plate = info.plate
     local name = unitName(unit)
-    if name and name ~= info.name then
-      -- nameplate unit IDs are recycled; refresh GUID and matching.
-      info = resolveUnit(unit) or info
-      plate = info.plate
+    local guidOk, liveGuid = apiCall(UnitGUID, unit)
+    if not guidOk or not allowed(liveGuid) or type(liveGuid) ~= "string" then liveGuid = nil end
+    local livePlate = plateFor(unit)
+    -- Nameplate tokens recycle even between creatures with identical names.
+    -- Compare current GUID and physical frame, not only display name.
+    if name ~= info.name or liveGuid ~= info.guid or
+       (livePlate and livePlate ~= plate) then
+      if livePlate then
+        if plate and plate ~= livePlate and plates[plate] then
+          pcall(plates[plate].Hide, plates[plate])
+        end
+        observedUnits[unit] = {plate=livePlate, guid=liveGuid, name=name}
+        info = observedUnits[unit]
+        plate = livePlate
+        observation("unit-plate:" .. unit, "revalidated:" .. safe(liveGuid) .. ":" .. safe(name))
+      else
+        observedUnits[unit] = nil
+        if plate and plates[plate] then pcall(plates[plate].Hide, plates[plate]) end
+        plate = nil
+      end
     end
     local totem = name and lookup[name]
     local overlay = plate and plates[plate]
@@ -550,7 +573,7 @@ local function command(msg)
     updatePlates()
   elseif msg == "unknown on" or msg == "unknown off" then
     db.showUnknownEnemies = msg == "unknown on"
-    say("Observed-but-unverified enemies: " .. (db.showUnknownEnemies and "ON" or "OFF"))
+    say("Optional visible enemies (range unverified): " .. (db.showUnknownEnemies and "ON" or "OFF"))
     updatePlates()
   elseif msg:match("^range%s+") or msg == "ranges" then
     local term = msg:match("^range%s+(.+)$")
@@ -606,7 +629,12 @@ TC:SetScript("OnEvent", function(_, event, arg)
     if culled > 0 then say("Culled " .. culled .. " old diagnostic records. Recent history retained; /reload saves it.") end
     if db.mode ~= "all" and db.mode ~= "missing" and db.mode ~= "affected" then db.mode = "all" end
     if db.nameLayout ~= "inline" then db.nameLayout = "stacked" end
-    if db.showUnknownEnemies == nil then db.showUnknownEnemies = true end
+    -- Migrate the former noisy default OFF once; later manual choices persist.
+    if not db.verifiedCoverageDefaultApplied then
+      db.showUnknownEnemies = false
+      db.verifiedCoverageDefaultApplied = true
+    end
+    if db.showUnknownEnemies == nil then db.showUnknownEnemies = false end
     confirmedDeadGUIDs = {}
     db.diag = false -- never silently resume massive logging after a reload
     db.nativeOwned = false
