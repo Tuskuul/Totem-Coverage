@@ -1,4 +1,4 @@
-TOTEM COVERAGE v0.1.1-beta.15 | WoW Forever 1.60.1
+TOTEM COVERAGE v0.1.1-beta.16 | WoW Forever 1.60.1
 ================================================
 TEST BUILD: Not yet tested in a running Forever client.
 
@@ -198,3 +198,17 @@ when logging is OFF. /reload or logout is required to write the culled file.
 Note: if one session produces >1,200 entries, early session markers may be
 pruned; the latest events are favored over long historical session retention.
 Native WoWCombatLog files are managed by the client, not this cull.
+
+BETA.16 VERIFIED-FIRST EARTHBIND DISPLAY AND GUID REVALIDATION
+The primary Earthbind overlay now lists only positively observed Earthbind
+debuff auras. This does NOT establish caster ownership or totem-to-NPC range.
+Missing debuffs never count as "unaffected inside range": generic nameplates
+cannot establish Earthbind's 10 yd proximity. Combat-secret or unreadable
+auras display a single "Earthbind status unknown" line rather than inflated
+coverage totals. /tc unknown on explicitly opts into gray visible-enemy
+names and counts, labeled "range unverified". Legacy show-unknown default
+is migrated to OFF once, after which user choices persist.
+Enemy counts require readable GUIDs, and live nameplate GUIDs, display names,
+and plate frames are revalidated on each scan to handle recycled tokens,
+including same-named creatures. Confirmed dead GUID exclusions stay active.
+All existing friendly-nameplate controls and diagnostic culling remain.
