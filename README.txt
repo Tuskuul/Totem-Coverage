@@ -245,3 +245,11 @@ working nameplate text overlays. Maximum 40 cached plate frames during
 the test to avoid unlimited debug frame creation. Native widget drawing
 is performed by Blizzard; the Lua code never reads icon visibility.
 Do not merge to beta/main until field testing verifies the widgets.
+
+RESEARCH native.2: Forbidden-layout taint fix
+A plain label was anchored to an AuraContainer, inheriting its protected
+UntrustedLayoutScriptExecution aspects. Both the FontString and native
+container are now independently anchored to the unprotected nameplate.
+Label creation/layout failures are isolated and logged instead of bubbling
+up to the addon. There are no changes to the working totem-name overlay.
+Still research-only, off by default, and unverified in the WoW client.
