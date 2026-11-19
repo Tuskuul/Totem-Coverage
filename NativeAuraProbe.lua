@@ -5,9 +5,9 @@
 -- secret aura payloads, aura-button visibility, or spell identities in Lua.
 local addonName = ...
 local P = CreateFrame("Frame")
-local byPlate, byUnit = {}, {}
+local byPlate, byUnit, pendingUnits = {}, {}, {}
 local enabled, queued = false, false
-local MAX_PLATES = 12
+local MAX_PLATES = 40
 
 local function note(message)
   print("|cff63c8f7Totem Coverage|r native probe: " .. message)
@@ -59,8 +59,14 @@ local function newContainer(plate, offsetX, offsetY, filter, candidates, labelTe
     container:SetPoint("BOTTOM", plate, "TOP", offsetX, offsetY)
     container:SetFrameStrata("HIGH")
     container:EnableMouse(false)
-    container:SetFlowLayoutAnchorPoint("LEFT")
-    container:SetFlowLayoutGrowthDirection("RIGHT")
+    -- These layout helpers vary by build; missing helpers must not
+    -- prevent the native container probe from being constructed.
+    if type(container.SetFlowLayoutAnchorPoint) == "function" then
+      pcall(container.SetFlowLayoutAnchorPoint, container, "LEFT")
+    end
+    if type(container.SetFlowLayoutGrowthDirection) == "function" then
+      pcall(container.SetFlowLayoutGrowthDirection, container, "RIGHT")
+    end
     container:AddAuraGroup("tcprobe", filter, {
       maxFrameCount = 4,
       initializeFrame = initButton,
@@ -100,7 +106,7 @@ local function hideEntry(entry)
 end
 local function attach(unit)
   if not enabled or not eligible(unit) then return end
-  if restricted() then queued = true; return end
+  if restricted() then queued = true; pendingUnits[unit] = true; return end
   local plate = getPlate(unit)
   if not plate then return end
   local entry = byPlate[plate]
@@ -110,7 +116,7 @@ local function attach(unit)
     if n >= MAX_PLATES then return end
     local reason
     entry, reason = makePair(plate)
-    if not entry then diag("create-failed:" .. tostring(reason)); return end
+    if not entry then diag("create-failed:" .. tostring(reason)); note("AuraContainer unavailable: " .. tostring(reason)); return end
     byPlate[plate] = entry
     diag("pair-created:" .. unit)
   end
@@ -129,6 +135,7 @@ local function attach(unit)
     diag("attached:" .. unit)
   else
     queued = true
+    pendingUnits[unit] = true
     diag("attach-failed:" .. tostring(err))
   end
 end
@@ -138,6 +145,10 @@ local function refresh()
     return
   end
   queued = false
+  for unit in pairs(pendingUnits) do
+    pendingUnits[unit] = nil
+    if eligible(unit) then attach(unit) end
+  end
   if C_NamePlate and C_NamePlate.GetNamePlates then
     -- The API returns frames, not safe unit tokens. Do not fabricate tokens.
     -- Existing NAME_PLATE_UNIT_ADDED events establish token associations.
@@ -160,6 +171,7 @@ local function setEnabled(value)
   else
     for _, entry in pairs(byPlate) do hideEntry(entry) end
     for unit in pairs(byUnit) do byUnit[unit] = nil end
+    for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
     note("OFF.")
   end
 end
@@ -189,11 +201,13 @@ P:SetScript("OnEvent", function(_, event, arg)
   elseif event == "NAME_PLATE_UNIT_ADDED" then
     attach(arg)
   elseif event == "NAME_PLATE_UNIT_REMOVED" then
+    pendingUnits[arg] = nil
     local entry = byUnit[arg]
     if entry then hideEntry(entry); byUnit[arg] = nil end
   elseif event == "PLAYER_ENTERING_WORLD" then
     for _, entry in pairs(byPlate) do hideEntry(entry) end
     for unit in pairs(byUnit) do byUnit[unit] = nil end
+    for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
   elseif event == "PLAYER_REGEN_ENABLED" and queued then
     refresh()
   end
